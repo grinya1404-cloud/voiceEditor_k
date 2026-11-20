@@ -484,4 +484,168 @@ public static float[] highPass(float[] pcm, int sampleRate, float cutoffHz, bool
   }
   return out;
 }
+
+/**
+ * G7: VAD-гейт. Заглушает участки, где RMS ниже thresholdDb (например, -40 dB).
+ * holdMs — сколько мс держать «открытым» после последнего громкого фрейма
+ * (чтобы не рубить хвосты слов).
+ */
+public static float[] vadGate(float[] pcm, int sampleRate, float thresholdDb, int holdMs) {
+  int ch = 2;
+  int frames = pcm.length / ch;
+  if (frames == 0)
+    return pcm;
+
+  float[] out = pcm.clone();
+  float threshold = (float) Math.pow(10.0, thresholdDb / 20.0);
+  int holdFrames = Math.max(1, holdMs * sampleRate / 1000);
+  int window = Math.max(1, sampleRate / 100); // 10 мс
+
+  boolean open = false;
+  int holdLeft = 0;
+
+  for (int start = 0; start < frames; start += window) {
+    int end = Math.min(start + window, frames);
+    double sum = 0;
+    int count = 0;
+    for (int i = start; i < end; i++) {
+      float l = pcm[i * ch];
+      float r = pcm[i * ch + 1];
+      sum += l * l + r * r;
+      count += 2;
+    }
+    float rms = count > 0 ? (float) Math.sqrt(sum / count) : 0f;
+
+    if (rms >= threshold) {
+      open = true;
+      holdLeft = holdFrames;
+    } else if (holdLeft > 0) {
+      holdLeft -= (end - start);
+    } else {
+      open = false;
+    }
+
+    if (!open) {
+      for (int i = start; i < end; i++) {
+        out[i * ch] = 0f;
+        out[i * ch + 1] = 0f;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * G8: де-эссер. Простое подавление сибилянтов (5–9 кГц):
+ * если энергия в полосе выше thresholdDb, применяем gain reductionDb к этой полосе.
+ * Реализация: high-pass 5 кГц → огибающая → gain на полосе → вычитаем из сигнала.
+ */
+public static float[] deEss(float[] pcm, int sampleRate, float thresholdDb, float reductionDb) {
+  int ch = 2;
+  int frames = pcm.length / ch;
+  if (frames == 0)
+    return pcm;
+
+  // Полосовой фильтр 5–9 кГц (грубо: high-pass 5 кГц, затем low-pass 9 кГц)
+  float[] hp = highPass(pcm, sampleRate, 5000f, true, true);
+  // low-pass через инверсию high-pass? проще — простой one-pole low-pass на 9 кГц
+  float[] band = lowPass(hp, sampleRate, 9000f, true, true);
+
+  // Огибающая (RMS по окну 5 мс)
+  int window = Math.max(1, sampleRate / 200);
+  float threshold = (float) Math.pow(10.0, thresholdDb / 20.0);
+  float reduction = (float) Math.pow(10.0, -Math.abs(reductionDb) / 20.0);
+
+  float[] out = pcm.clone();
+  for (int start = 0; start < frames; start += window) {
+    int end = Math.min(start + window, frames);
+    double sum = 0;
+    int count = 0;
+    for (int i = start; i < end; i++) {
+      float l = band[i * ch];
+      float r = band[i * ch + 1];
+      sum += l * l + r * r;
+      count += 2;
+    }
+    float rms = count > 0 ? (float) Math.sqrt(sum / count) : 0f;
+    if (rms > threshold) {
+      float g = reduction;
+      for (int i = start; i < end; i++) {
+        out[i * ch] -= band[i * ch] * (1f - g);
+        out[i * ch + 1] -= band[i * ch + 1] * (1f - g);
+      }
+    }
+  }
+  return out;
+}
+
+/** One-pole low-pass (для де-эссера). */
+private static float[] lowPass(float[] pcm, int sampleRate, float cutoffHz, boolean applyL,
+    boolean applyR) {
+  int ch = 2;
+  int frames = pcm.length / ch;
+  float[] out = pcm.clone();
+  double dt = 1.0 / sampleRate;
+  double rc = 1.0 / (2 * Math.PI * cutoffHz);
+  double alpha = dt / (rc + dt);
+
+  if (applyL) {
+    double y = 0;
+    for (int i = 0; i < frames; i++) {
+      y += alpha * (out[i * ch] - y);
+      out[i * ch] = (float) y;
+    }
+  }
+  if (applyR) {
+    double y = 0;
+    for (int i = 0; i < frames; i++) {
+      y += alpha * (out[i * ch + 1] - y);
+      out[i * ch + 1] = (float) y;
+    }
+  }
+  return out;
+}
+
+/**
+ * G9: компрессор. thresholdDb — порог (например, -18 dB), ratio — степень сжатия (например, 3.0),
+ * attackMs/releaseMs — время атаки/восстановления, makeupDb — компенсация gain.
+ */
+public static float[] compress(float[] pcm, int sampleRate, float thresholdDb, float ratio,
+    float attackMs, float releaseMs, float makeupDb) {
+  int ch = 2;
+  int frames = pcm.length / ch;
+  if (frames == 0)
+    return pcm;
+
+  float[] out = pcm.clone();
+  float threshold = (float) Math.pow(10.0, thresholdDb / 20.0);
+  float makeup = (float) Math.pow(10.0, makeupDb / 20.0);
+  float attack = (float) Math.exp(-1.0 / (sampleRate * attackMs / 1000.0));
+  float release = (float) Math.exp(-1.0 / (sampleRate * releaseMs / 1000.0));
+
+  float env = 0f;
+  for (int i = 0; i < frames; i++) {
+    float l = pcm[i * ch];
+    float r = pcm[i * ch + 1];
+    float peak = Math.max(Math.abs(l), Math.abs(r));
+    if (peak > env)
+      env = attack * env + (1 - attack) * peak;
+    else
+      env = release * env + (1 - release) * peak;
+
+    float gain = 1f;
+    if (env > threshold) {
+      float over = env / threshold;          // >1
+      float compressed = (float) Math.pow(over, 1.0 / ratio - 1.0);
+      gain = compressed;
+    }
+    out[i * ch] = l * gain * makeup;
+    out[i * ch + 1] = r * gain * makeup;
+  }
+  return out;
+}
+
+
+
+
 }

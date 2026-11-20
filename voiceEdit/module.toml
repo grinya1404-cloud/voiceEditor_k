@@ -1,0 +1,72 @@
+version = 2
+
+[module]
+type = "android-app"
+name = "voiceEdit"
+languageLevel = "JAVA_8"
+output = "build/classes"
+
+[sourceSets.androidTest]
+scope = "TEST_IMPLEMENTATION"
+java = ["src/androidTest/java", "src/androidTest/kotlin"]
+resources = ["src/androidTest/resources"]
+
+[sourceSets.debug]
+scope = "IMPLEMENTATION"
+aidl = ["src/debug/aidl"]
+assets = ["src/debug/assets"]
+java = ["src/debug/java", "src/debug/kotlin"]
+jniLibs = ["src/debug/jniLibs"]
+res = ["src/debug/res"]
+resources = ["src/debug/resources"]
+
+[sourceSets.main]
+scope = "IMPLEMENTATION"
+java = ["src/androidMain/kotlin", "src/commonMain/kotlin", "src/main/java", "src/main/kotlin"]
+res = ["src/androidMain/res", "src/main/res"]
+aidl = ["src/main/aidl"]
+assets = ["src/main/assets"]
+jniLibs = ["src/main/jniLibs"]
+resources = ["src/main/resources"]
+
+[sourceSets.release]
+scope = "IMPLEMENTATION"
+aidl = ["src/release/aidl"]
+assets = ["src/release/assets"]
+java = ["src/release/java", "src/release/kotlin"]
+jniLibs = ["src/release/jniLibs"]
+res = ["src/release/res"]
+resources = ["src/release/resources"]
+
+[sourceSets.test]
+scope = "TEST_IMPLEMENTATION"
+java = ["src/commonTest/kotlin", "src/test/java", "src/test/kotlin"]
+resources = ["src/test/resources"]
+
+[dependencies]
+implementation = ["org.jetbrains.compose.runtime:runtime:1.11.1", "org.jetbrains.compose.foundation:foundation:1.11.1", "org.jetbrains.compose.material3:material3:1.9.0", "org.jetbrains.compose.ui:ui:1.11.1", "org.jetbrains.compose.components:components-ui-tooling-preview:1.11.1", "androidx.activity:activity-compose:1.13.0"]
+testImplementation = ["org.jetbrains.kotlin:kotlin-test:2.4.0"]
+
+[android]
+namespace = "com.example.shared"
+compileSdk = 36
+minSdk = 24
+targetSdk = 36
+manifest = "src/androidMain/AndroidManifest.xml"
+versionCode = 1
+versionName = "1.0"
+isApplication = true
+manifestPlaceholders = []
+buildConfigFields = []
+buildTypes = [{ name = "debug", debuggable = true, minifyEnabled = false, shrinkResources = false }, { name = "release", debuggable = false, minifyEnabled = false, shrinkResources = false, proguardFiles = ["proguard-android-optimize.txt", "proguard-rules.pro"] }]
+nonTransitiveRClass = false
+compose = true
+
+[kotlin]
+commonSourceRoots = ["src/commonMain/kotlin"]
+activeTarget = "android"
+targets = [{ name = "android", platform = "android", type = "android-app", roots = ["src/androidMain/kotlin", "src/androidMain/res|android-res"], dependencies = ["IMPLEMENTATION lib:androidx.activity:activity-compose:1.13.0"], facets = { android = { namespace = "com.example.shared", compileSdk = 36, minSdk = 24, targetSdk = 36, manifest = "src/androidMain/AndroidManifest.xml", versionCode = 1, versionName = "1.0", isApplication = true, manifestPlaceholders = [], buildConfigFields = [], buildTypes = [{ name = "debug", debuggable = true, minifyEnabled = false, shrinkResources = false }, { name = "release", debuggable = false, minifyEnabled = false, shrinkResources = false, proguardFiles = ["proguard-android-optimize.txt", "proguard-rules.pro"] }], nonTransitiveRClass = false, compose = true } } }, { name = "jvm", platform = "jvm", type = "java-lib", roots = ["src/desktopMain/kotlin", "src/desktopMain/resources|resource"], dependencies = ["IMPLEMENTATION lib:org.jetbrains.compose.desktop:desktop-jvm-linux-arm64:1.11.1", "IMPLEMENTATION lib:org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.11.0"] }]
+
+[kotlin.shared]
+roots = ["src/commonMain/kotlin"]
+testRoots = ["src/commonTest/kotlin"]

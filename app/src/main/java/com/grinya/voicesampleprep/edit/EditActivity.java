@@ -59,7 +59,6 @@ public class EditActivity extends AppCompatActivity
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_edit);
 
-    // Перехват свайпа назад (F2: единственный перехватчик)
     getOnBackPressedDispatcher().addCallback(this,
         new androidx.activity.OnBackPressedCallback(true) {
           @Override
@@ -131,7 +130,7 @@ public class EditActivity extends AppCompatActivity
 
       popup.setOnMenuItemClickListener(item -> {
         switch (item.getItemId()) {
-          case 1: // Сохранить
+          case 1:
             try {
               clip.save();
               isChanged = false;
@@ -140,18 +139,18 @@ public class EditActivity extends AppCompatActivity
               Toast.makeText(this, "Ошибка: " + e.getMessage(), Toast.LENGTH_LONG).show();
             }
             return true;
-          case 2: // Инфо
+          case 2:
             int start = wave.hasSelection() ? wave.getSelStart() : -1;
             int end = wave.hasSelection() ? wave.getSelEnd() : -1;
             AudioInfoDialog.show(this, clip, start, end);
             return true;
-          case 3: // Экспорт
+          case 3:
             int selStart = wave.hasSelection() ? wave.getSelStart() : -1;
             int selEnd = wave.hasSelection() ? wave.getSelEnd() : -1;
             ExportActivity.setSource(clip, selStart, selEnd);
             startActivity(new Intent(this, ExportActivity.class));
             return true;
-          case 4: // Экспорт в банк
+          case 4:
             EditActivityHolder.current = clip;
             startActivity(new Intent(this, ExportToBankActivity.class));
             return true;
@@ -260,6 +259,18 @@ public class EditActivity extends AppCompatActivity
       case "Channels":
         runChannels();
         break;
+
+      case "VAD Gate":
+        runVadGate();
+        break;
+
+      case "De-esser":
+        runDeEsser();
+        break;
+
+      case "Compressor":
+        runCompressor();
+        break;
     }
   }
 
@@ -274,13 +285,79 @@ public class EditActivity extends AppCompatActivity
       try {
         float[] denoised = com.grinya.voicesampleprep.util.Denoiser.denoiseStereo(range);
         runOnUiThread(() -> {
-          clip.insert(denoised, start, start, end);
+          clip.replaceRangePcm(denoised, start, end);
           refreshAfterChange();
           Toast.makeText(this, "Denoise готов", Toast.LENGTH_SHORT).show();
         });
       } catch (Throwable e) {
         runOnUiThread(() -> Toast
             .makeText(this, "Ошибка Denoise: " + e.getMessage(), Toast.LENGTH_LONG).show());
+      }
+    }).start();
+  }
+
+  private void runVadGate() {
+    if (clip.pcm == null || clip.pcm.length == 0)
+      return;
+    int start = wave.hasSelection() ? wave.getSelStart() : 0;
+    int end = wave.hasSelection() ? wave.getSelEnd() : clip.frameCount();
+    float[] range = com.grinya.voicesampleprep.util.AudioOps.trim(clip.pcm, start, end);
+    new Thread(() -> {
+      try {
+        float[] out = com.grinya.voicesampleprep.util.AudioOps.vadGate(range, clip.sampleRate, -40f,
+            100);
+        runOnUiThread(() -> {
+          clip.replaceRangePcm(out, start, end);
+          refreshAfterChange();
+          Toast.makeText(this, "VAD Gate готов", Toast.LENGTH_SHORT).show();
+        });
+      } catch (Throwable e) {
+        runOnUiThread(
+            () -> Toast.makeText(this, "Ошибка VAD: " + e.getMessage(), Toast.LENGTH_LONG).show());
+      }
+    }).start();
+  }
+
+  private void runDeEsser() {
+    if (clip.pcm == null || clip.pcm.length == 0)
+      return;
+    int start = wave.hasSelection() ? wave.getSelStart() : 0;
+    int end = wave.hasSelection() ? wave.getSelEnd() : clip.frameCount();
+    float[] range = com.grinya.voicesampleprep.util.AudioOps.trim(clip.pcm, start, end);
+    new Thread(() -> {
+      try {
+        float[] out = com.grinya.voicesampleprep.util.AudioOps.deEss(range, clip.sampleRate, -30f,
+            6f);
+        runOnUiThread(() -> {
+          clip.replaceRangePcm(out, start, end);
+          refreshAfterChange();
+          Toast.makeText(this, "De-esser готов", Toast.LENGTH_SHORT).show();
+        });
+      } catch (Throwable e) {
+        runOnUiThread(() -> Toast
+            .makeText(this, "Ошибка De-esser: " + e.getMessage(), Toast.LENGTH_LONG).show());
+      }
+    }).start();
+  }
+
+  private void runCompressor() {
+    if (clip.pcm == null || clip.pcm.length == 0)
+      return;
+    int start = wave.hasSelection() ? wave.getSelStart() : 0;
+    int end = wave.hasSelection() ? wave.getSelEnd() : clip.frameCount();
+    float[] range = com.grinya.voicesampleprep.util.AudioOps.trim(clip.pcm, start, end);
+    new Thread(() -> {
+      try {
+        float[] out = com.grinya.voicesampleprep.util.AudioOps.compress(range, clip.sampleRate,
+            -18f, 3f, 10f, 100f, 2f);
+        runOnUiThread(() -> {
+          clip.replaceRangePcm(out, start, end);
+          refreshAfterChange();
+          Toast.makeText(this, "Компрессор готов", Toast.LENGTH_SHORT).show();
+        });
+      } catch (Throwable e) {
+        runOnUiThread(() -> Toast
+            .makeText(this, "Ошибка компрессора: " + e.getMessage(), Toast.LENGTH_LONG).show());
       }
     }).start();
   }
@@ -382,9 +459,9 @@ public class EditActivity extends AppCompatActivity
     findViewById(R.id.btnMore).setOnClickListener(v -> {
       androidx.appcompat.widget.PopupMenu popup = new androidx.appcompat.widget.PopupMenu(this, v);
       popup.getMenu().add(0, 1, 0, "Denoise");
-      popup.getMenu().add(0, 2, 0, "Auto-Trim");
-      popup.getMenu().add(0, 3, 0, "Channels");
-      popup.getMenu().add(0, 4, 0, "Insert");
+      popup.getMenu().add(0, 2, 0, "VAD Gate");
+      popup.getMenu().add(0, 3, 0, "Auto-Trim");
+      popup.getMenu().add(0, 4, 0, "Channels");
       popup.getMenu().add(0, 5, 0, "Silence");
       popup.getMenu().add(0, 6, 0, "Gain");
       popup.getMenu().add(0, 7, 0, "Normalize");
@@ -394,6 +471,9 @@ public class EditActivity extends AppCompatActivity
       popup.getMenu().add(0, 11, 0, "Invert");
       popup.getMenu().add(0, 12, 0, "To Mono");
       popup.getMenu().add(0, 13, 0, "High-Pass");
+      popup.getMenu().add(0, 15, 0, "De-esser");
+      popup.getMenu().add(0, 14, 0, "Compressor");
+      popup.getMenu().add(0, 16, 0, "Insert");
 
       popup.setOnMenuItemClickListener(item -> {
         String actionName = item.getTitle().toString();
@@ -413,6 +493,7 @@ public class EditActivity extends AppCompatActivity
       if (wave.hasSelection()) {
         clip.addMarker(wave.getSelStart());
         clip.addMarker(wave.getSelEnd());
+        wave.clearSelection(); // B12: сброс выделения после установки меток
       } else {
         int f = player.getCurrentFrame();
         if (wave.isZeroCrossingSnap() && clip.pcm != null) {
@@ -429,6 +510,10 @@ public class EditActivity extends AppCompatActivity
       showMarkerList();
       return true;
     });
+
+    // B13: кнопки перелистывания интервалов (показываются в режиме интервалов)
+    findViewById(R.id.btnIntervalUp).setOnClickListener(v -> wave.nextIntervalPage());
+    findViewById(R.id.btnIntervalDown).setOnClickListener(v -> wave.prevIntervalPage());
   }
 
   private void showGainDialog() {
@@ -670,7 +755,6 @@ public class EditActivity extends AppCompatActivity
 
   @Override
   public void onSelectionChanged(int startFrame, int endFrame) {
-    // пока ничего
   }
 
   @Override
@@ -697,6 +781,17 @@ public class EditActivity extends AppCompatActivity
     player.seekToFrame(frame);
     wave.setPlayheadFrame(frame);
     updateTimeLabel();
+  }
+
+  @Override
+  public void onMarkerMoved(int oldFrame, int newFrame) {
+    if (clip.moveMarker(oldFrame, newFrame)) {
+      refreshAfterChange();
+      Toast.makeText(this, "Маркер перемещён", Toast.LENGTH_SHORT).show();
+    } else {
+      Toast.makeText(this, "Не удалось переместить (занято?)", Toast.LENGTH_SHORT).show();
+      refreshAfterChange();
+    }
   }
 
   @Override
@@ -743,6 +838,7 @@ public class EditActivity extends AppCompatActivity
     }
 
     java.util.ArrayList<String> options = new java.util.ArrayList<>();
+    options.add("Переместить");
     options.add("Соединить");
     if (hasInterval)
       options.add("Отменить соединение");
@@ -751,7 +847,10 @@ public class EditActivity extends AppCompatActivity
     new AlertDialog.Builder(this).setTitle("Маркер @" + time)
         .setItems(options.toArray(new String[0]), (d, which) -> {
           String choice = options.get(which);
-          if (choice.equals("Соединить")) {
+          if (choice.equals("Переместить")) {
+            wave.startMarkerDrag(frame);
+            Toast.makeText(this, "Ткните в новое место", Toast.LENGTH_SHORT).show();
+          } else if (choice.equals("Соединить")) {
             pendingStartMarker = frame;
             Toast.makeText(this, "Выберите второй маркер (долгий тап)", Toast.LENGTH_SHORT).show();
           } else if (choice.equals("Отменить соединение")) {
@@ -789,12 +888,12 @@ public class EditActivity extends AppCompatActivity
         .setItems(new String[] { "Проиграть", "Удалить", "Экспортировать", "В банк", "Инфо" },
             (d, which) -> {
               switch (which) {
-                case 0: // Проиграть
+                case 0:
                   player.setPlayRange(startFrame, endFrame);
                   player.seekToFrame(startFrame);
                   player.play();
                   break;
-                case 1: // Удалить
+                case 1:
                   clip.removeExportInterval(startFrame, endFrame);
                   wave.updateExportIntervals(clip.exportIntervals);
                   isChanged = true;
@@ -802,17 +901,17 @@ public class EditActivity extends AppCompatActivity
                     wave.setIntervalsEditMode(false);
                   }
                   break;
-                case 2: // Экспортировать
+                case 2:
                   ExportActivity.setForcedInterval(startFrame, endFrame);
                   ExportActivity.setSource(clip, -1, -1);
                   startActivity(new Intent(this, ExportActivity.class));
                   break;
-                case 3: // В банк
+                case 3:
                   ExportToBankActivity.setForcedInterval(startFrame, endFrame);
                   EditActivityHolder.current = clip;
                   startActivity(new Intent(this, ExportToBankActivity.class));
                   break;
-                case 4: // Инфо
+                case 4:
                   AudioInfoDialog.showInterval(this, clip, startFrame, endFrame);
                   break;
               }
@@ -822,7 +921,9 @@ public class EditActivity extends AppCompatActivity
 
   @Override
   public void onIntervalsModeChanged(boolean enabled) {
-    // ничего
+    int vis = enabled ? View.VISIBLE : View.GONE;
+    findViewById(R.id.btnIntervalUp).setVisibility(vis);
+    findViewById(R.id.btnIntervalDown).setVisibility(vis);
   }
 
   @Override
@@ -832,31 +933,14 @@ public class EditActivity extends AppCompatActivity
     }
   }
 
-  private void confirmExit() {
-    if (isChanged) {
-      new AlertDialog.Builder(this).setTitle("Выйти без сохранения?")
-          .setMessage("В файле есть несохранённые изменения.")
-          .setPositiveButton("Сохранить", (d, w) -> {
-            try {
-              clip.save();
-              isChanged = false;
-              finish();
-            } catch (Exception e) {
-              Toast.makeText(this, "Ошибка: " + e.getMessage(), Toast.LENGTH_LONG).show();
-            }
-          }).setNegativeButton("Выйти без сохранения", (d, w) -> finish())
-          .setNeutralButton("Отмена", null).show();
-    } else {
-      finish();
-    }
-  }
-
   @Override
   protected void onPause() {
     super.onPause();
     if (player != null && player.isPlaying())
       player.pause();
     pendingStartMarker = -1;
+    if (wave != null)
+      wave.cancelMarkerDrag();
   }
 
   @Override
@@ -908,6 +992,25 @@ public class EditActivity extends AppCompatActivity
               .makeText(this, "Ошибка вставки: " + e.getMessage(), Toast.LENGTH_LONG).show());
         }
       }).start();
+    }
+  }
+
+  private void confirmExit() {
+    if (isChanged) {
+      new AlertDialog.Builder(this).setTitle("Выйти без сохранения?")
+          .setMessage("В файле есть несохранённые изменения.")
+          .setPositiveButton("Сохранить", (d, w) -> {
+            try {
+              clip.save();
+              isChanged = false;
+              finish();
+            } catch (Exception e) {
+              Toast.makeText(this, "Ошибка: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+          }).setNegativeButton("Выйти без сохранения", (d, w) -> finish())
+          .setNeutralButton("Отмена", null).show();
+    } else {
+      finish();
     }
   }
 }

@@ -8,6 +8,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -131,11 +132,18 @@ public class MainActivity extends AppCompatActivity {
       h.info.setText(b.clips.size() + " клипов");
       h.itemView.setOnClickListener(v -> openBank(b));
       h.itemView.setOnLongClickListener(v -> {
-        new AlertDialog.Builder(MainActivity.this).setTitle("Удалить банк?").setMessage(b.name)
-            .setPositiveButton("Удалить", (d, w) -> {
-              bankManager.deleteBank(b);
-              reload();
-            }).setNegativeButton("Отмена", null).show();
+        new AlertDialog.Builder(MainActivity.this).setTitle(b.name)
+            .setItems(new String[] { "Переименовать", "Удалить" }, (d, which) -> {
+              if (which == 0) {
+                showRenameBankDialog(b);
+              } else {
+                new AlertDialog.Builder(MainActivity.this).setTitle("Удалить банк?")
+                    .setMessage(b.name).setPositiveButton("Удалить", (dd, ww) -> {
+                      bankManager.deleteBank(b);
+                      reload();
+                    }).setNegativeButton("Отмена", null).show();
+              }
+            }).show();
         return true;
       });
     }
@@ -154,5 +162,24 @@ public class MainActivity extends AppCompatActivity {
         info = v.findViewById(R.id.txtBankInfo);
       }
     }
+  }
+
+  private void showRenameBankDialog(Bank b) {
+    EditText input = new EditText(this);
+    input.setText(b.name);
+    input.setSelection(input.getText().length());
+    input.setInputType(InputType.TYPE_CLASS_TEXT);
+
+    new AlertDialog.Builder(this).setTitle("Переименовать банк").setView(input)
+        .setPositiveButton("OK", (d, w) -> {
+          String newName = input.getText().toString().trim();
+          if (newName.isEmpty())
+            return;
+          if (bankManager.renameBank(b, newName)) {
+            adapter.notifyDataSetChanged(); // <-- вместо reload()
+          } else {
+            Toast.makeText(this, "Не удалось (занято?)", Toast.LENGTH_SHORT).show();
+          }
+        }).setNegativeButton("Отмена", null).show();
   }
 }

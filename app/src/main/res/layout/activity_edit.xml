@@ -94,6 +94,28 @@
             android:gravity="center">
 
             <Button
+                android:id="@+id/btnIntervalUp"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="8dp"
+                android:text="↑"
+                android:textSize="20sp"
+                android:textColor="@color/accent"
+                android:backgroundTint="#AA1A1A1E"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/btnIntervalDown"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginBottom="8dp"
+                android:text="↓"
+                android:textSize="20sp"
+                android:textColor="@color/accent"
+                android:backgroundTint="#AA1A1A1E"
+                android:visibility="gone" />
+
+            <Button
                 android:id="@+id/btnZoomIn"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
@@ -178,79 +200,77 @@
 
     </FrameLayout>
 
-    <!-- Панель инструментов (горизонтальный скролл) -->
-    <!-- Панель инструментов (горизонтальный скролл) -->
-<!-- Панель инструментов (растянута на всю ширину) -->
-<LinearLayout
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:background="@color/surface"
-    android:padding="6dp"
-    android:gravity="center_vertical">
-
-    <TextView
-        android:id="@+id/btnTrim"
-        style="@style/AmberButton"
-        android:layout_width="0dp"
+    <!-- Панель инструментов (растянута на всю ширину) -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginEnd="4dp"
-        android:text="@string/trim" />
+        android:orientation="horizontal"
+        android:background="@color/surface"
+        android:padding="6dp"
+        android:gravity="center_vertical">
 
-    <TextView
-        android:id="@+id/btnCut"
-        style="@style/AmberButton"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginEnd="4dp"
-        android:text="@string/cut" />
+        <TextView
+            android:id="@+id/btnTrim"
+            style="@style/AmberButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="@string/trim" />
 
-    <TextView
-        android:id="@+id/btnCopy"
-        style="@style/AmberButton"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginEnd="4dp"
-        android:text="@string/copy" />
+        <TextView
+            android:id="@+id/btnCut"
+            style="@style/AmberButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="@string/cut" />
 
-    <TextView
-        android:id="@+id/btnPaste"
-        style="@style/AmberButton"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginEnd="4dp"
-        android:text="@string/paste" />
+        <TextView
+            android:id="@+id/btnCopy"
+            style="@style/AmberButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="@string/copy" />
 
-    <TextView
-        android:id="@+id/btnDynamic1"
-        style="@style/AmberButton"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginEnd="4dp"
-        android:visibility="gone"
-        android:text="" />
+        <TextView
+            android:id="@+id/btnPaste"
+            style="@style/AmberButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="@string/paste" />
 
-    <TextView
-        android:id="@+id/btnDynamic2"
-        style="@style/AmberButton"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginEnd="4dp"
-        android:visibility="gone"
-        android:text="" />
+        <TextView
+            android:id="@+id/btnDynamic1"
+            style="@style/AmberButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:visibility="gone"
+            android:text="" />
 
-    <TextView
-        android:id="@+id/btnMore"
-        style="@style/AmberButton"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:text="⋮" />
-</LinearLayout>
+        <TextView
+            android:id="@+id/btnDynamic2"
+            style="@style/AmberButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:visibility="gone"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/btnMore"
+            style="@style/AmberButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="⋮" />
+    </LinearLayout>
 </LinearLayout>
