@@ -28,11 +28,20 @@ class ExportToBankActivity : AppCompatActivity() {
     companion object {
         private var forcedStart = -1
         private var forcedEnd = -1
+        private var selStart = -1
+        private var selEnd = -1
 
         @JvmStatic
         fun setForcedInterval(start: Int, end: Int) {
             forcedStart = start
             forcedEnd = end
+        }
+
+        @JvmStatic
+        fun setSource(clip: AudioClip, start: Int, end: Int) {
+            EditActivityHolder.current = clip
+            selStart = start
+            selEnd = end
         }
     }
 
@@ -43,6 +52,8 @@ class ExportToBankActivity : AppCompatActivity() {
 
     private var forcedStartLocal = -1
     private var forcedEndLocal = -1
+    private var selStartLocal = -1
+    private var selEndLocal = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,8 +71,40 @@ class ExportToBankActivity : AppCompatActivity() {
         forcedStart = -1
         forcedEnd = -1
 
+        selStartLocal = selStart
+        selEndLocal = selEnd
+        selStart = -1
+        selEnd = -1
+
         if (forcedStartLocal != -1) {
             findViewById<View>(R.id.rgMode).visibility = View.GONE
+        } else {
+            // Обновляем текст первой кнопки, если есть выделение
+            val rbSingle = findViewById<RadioButton>(R.id.rbSingle)
+            if (selStartLocal >= 0 && selEndLocal > selStartLocal) {
+                val durationMs = (selEndLocal - selStartLocal) * 1000 / clip.sampleRate
+                val m = durationMs / 60000
+                val s = (durationMs % 60000) / 1000
+                val r = durationMs % 1000
+                val timeStr = String.format(Locale.US, "%02d:%02d.%03d", m, s, r)
+                rbSingle.text = "Один файл (выделение $timeStr)"
+            } else {
+                rbSingle.text = "Один файл (весь клип)"
+            }
+
+            // --- Динамический текст для режима маркеров/интервалов ---
+            val rbByMarkers = findViewById<RadioButton>(R.id.rbByMarkers)
+            val intervalsCount = clip.exportIntervals.size
+            val markersCount = clip.markers.size
+
+            if (intervalsCount > 0) {
+                rbByMarkers.text = "По интервалам ($intervalsCount)"
+            } else if (markersCount >= 2) {
+                rbByMarkers.text = "По маркерам ($markersCount)"
+            } else {
+                rbByMarkers.isEnabled = false
+                rbByMarkers.text = "По маркерам (нужно ≥ 2)"
+            }
         }
 
         bankManager = BankManager(this)
@@ -72,13 +115,6 @@ class ExportToBankActivity : AppCompatActivity() {
 
         findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<View>(R.id.btnNewBank).setOnClickListener { showCreateBankDialog() }
-
-        if (clip.markers.size < 2) {
-            findViewById<RadioButton>(R.id.rbByMarkers).apply {
-                isEnabled = false
-                text = "По маркерам (нужно ≥ 2 маркера)"
-            }
-        }
 
         reloadBanks()
     }
@@ -92,34 +128,39 @@ class ExportToBankActivity : AppCompatActivity() {
         input.hint = "Имя банка"
 
         AlertDialog.Builder(this).setTitle("Новый банк").setView(input)
-            .setPositiveButton("Создать") { _, _ ->
-                var name = input.text.toString().trim()
-                if (name.isEmpty()) name = "bank"
-                bankManager.createBank(name)
-                reloadBanks()
-            }.setNegativeButton("Отмена", null).show()
+        .setPositiveButton("Создать") { _, _ ->
+            var name = input.text.toString().trim()
+            if (name.isEmpty()) name = "bank"
+            bankManager.createBank(name)
+            reloadBanks()
+        }.setNegativeButton("Отмена", null).show()
     }
 
     private fun exportToBank(targetBank: Bank) {
-        var tempRanges: List<IntArray>
+        val ranges: List<IntArray>
 
         if (forcedStartLocal != -1 && forcedEndLocal > forcedStartLocal) {
-            tempRanges = listOf(intArrayOf(forcedStartLocal, forcedEndLocal))
+            ranges = listOf(intArrayOf(forcedStartLocal, forcedEndLocal))
         } else {
             val byMarkers = findViewById<RadioButton>(R.id.rbByMarkers).isChecked
-            tempRanges = ExportUtils.buildRanges(clip, byMarkers, -1, -1)
+            if (byMarkers) {
+                ranges = ExportUtils.buildRanges(clip, true, -1, -1)
+            } else {
+                if (selStartLocal >= 0 && selEndLocal > selStartLocal) {
+                    ranges = listOf(intArrayOf(selStartLocal, selEndLocal))
+                } else {
+                    ranges = listOf(intArrayOf(0, clip.frameCount()))
+                }
+            }
         }
 
-        if (tempRanges.isEmpty()) {
+        if (ranges.isEmpty()) {
             Toast.makeText(this, "Нечего экспортировать", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val ranges = tempRanges
         val saved = intArrayOf(0)
         val failed = intArrayOf(0)
-
-        // D7: исходные параметры — один раз до цикла
         val oldMeta = if (clip.dir != null) AudioMeta.load(clip.dir) else null
 
         Thread {
@@ -127,8 +168,12 @@ class ExportToBankActivity : AppCompatActivity() {
                 try {
                     val rangePcm = AudioOps.trim(clip.pcm, r[0], r[1])
 
-                    val baseName = ExportUtils.stripExt(clip.name)
-                    val nameNoExt = baseName + "_" + String.format(Locale.US, "%03d", idx + 1)
+                    // Если один файл (выделение или весь), имя без _001
+                    val nameNoExt = if (ranges.size == 1) {
+                        ExportUtils.stripExt(clip.name)
+                    } else {
+                        ExportUtils.stripExt(clip.name) + "_" + String.format(Locale.US, "%03d", idx + 1)
+                    }
 
                     var outFile = File(targetBank.dir, "$nameNoExt.wav")
                     var counter = 1
@@ -140,7 +185,6 @@ class ExportToBankActivity : AppCompatActivity() {
                     WavWriter.write(outFile, rangePcm, clip.sampleRate, clip.sampleRate, 16,
                         false, false, false, false, false)
 
-                    // D7: .meta с параметрами ИСХОДНИКА
                     val meta = AudioMeta()
                     if (oldMeta != null && (oldMeta.sampleRate > 0 || oldMeta.channels > 0)) {
                         meta.sampleRate = oldMeta.sampleRate
@@ -171,8 +215,6 @@ class ExportToBankActivity : AppCompatActivity() {
         }.start()
     }
 
-    // ---------- adapter ----------
-
     private inner class BankAdapter : RecyclerView.Adapter<BankAdapter.VH>() {
         private var data: List<Bank> = emptyList()
 
@@ -183,7 +225,7 @@ class ExportToBankActivity : AppCompatActivity() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             val v = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_bank_picker, parent, false)
+            .inflate(R.layout.item_bank_picker, parent, false)
             return VH(v)
         }
 

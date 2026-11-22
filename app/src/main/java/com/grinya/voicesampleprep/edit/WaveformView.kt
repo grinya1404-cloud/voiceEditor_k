@@ -92,6 +92,7 @@ class WaveformView @JvmOverloads constructor(
     private var intervalPage = 0
     private var intervalPageSize = 6
     private var selectedIntervalIndex = -1
+    private var justEnteredIntervalsMode = false
     private var lastWaveTop = 0
     private var lastWaveBottom = 0
     private var lastWaveWidth = 0
@@ -489,10 +490,14 @@ class WaveformView @JvmOverloads constructor(
         intervalsEditMode = enabled
         intervalPage = 0
         selectedIntervalIndex = -1
+        justEnteredIntervalsMode = false // <-- Сброс флага
         invalidate()
     }
 
     fun isIntervalsEditMode(): Boolean = intervalsEditMode
+
+    fun getIntervalCount(): Int = exportIntervals?.size ?: 0
+    fun getIntervalPageSize(): Int = intervalPageSize
 
     fun nextIntervalPage() {
         val ei = exportIntervals ?: return
@@ -582,6 +587,7 @@ class WaveformView @JvmOverloads constructor(
                     if (e.x >= drawX1 && e.x <= drawX2 && e.y >= tapTop && e.y <= tapBottom) {
                         if (!intervalsEditMode) {
                             setIntervalsEditMode(true)
+                            justEnteredIntervalsMode = true // <-- Флаг, что мы только что вошли
                             listener?.onIntervalsModeChanged(true)
                         } else {
                             selectedIntervalIndex = i
@@ -788,31 +794,35 @@ class WaveformView @JvmOverloads constructor(
             listener?.onSelectionChanged(selStart, selEnd)
         }
 
-        // Выход из режима интервалов
+        // Выход из режима интервалов (только если это НЕ первый тап)
         if (intervalsEditMode && selectedIntervalIndex != -1 && !longPressActivated) {
-            if (abs(e.x - downX) < 8 && abs(e.y - downY) < 8) {
-                val layout = calcStripLayout()
-                val startY = layout[0]
-                val stripH = layout[1]
-                val count = layout[2].toInt()
-                val startIdx = layout[3].toInt()
-                val endIdx = layout[4].toInt()
-                val stepY = stripH + 8f
+            if (justEnteredIntervalsMode) {
+                justEnteredIntervalsMode = false
+            } else {
+                if (abs(e.x - downX) < 8 && abs(e.y - downY) < 8) {
+                    val layout = calcStripLayout()
+                    val startY = layout[0]
+                    val stripH = layout[1]
+                    val count = layout[2].toInt()
+                    val startIdx = layout[3].toInt()
+                    val endIdx = layout[4].toInt()
+                    val stepY = stripH + 8f
 
-                if (count > 0 && selectedIntervalIndex >= startIdx && selectedIntervalIndex < endIdx) {
-                    val offsetY = startY + (selectedIntervalIndex - startIdx) * stepY
-                    val ei = exportIntervals
-                    if (ei != null) {
-                        val interval = ei[selectedIntervalIndex]
-                        val waveW = width - 2 * paddingPx
-                        val drawX1 = max(0f, frameToX(interval[0])) + paddingPx
-                        val drawX2 = min(waveW.toFloat(), frameToX(interval[1])) + paddingPx
-                        val tapTop = offsetY - stepY / 2f
-                        val tapBottom = offsetY + stripH + stepY / 2f
-                        if (e.x >= drawX1 && e.x <= drawX2 && e.y >= tapTop && e.y <= tapBottom) {
-                            setIntervalsEditMode(false)
-                            listener?.onIntervalsModeChanged(false)
-                            return true
+                    if (count > 0 && selectedIntervalIndex >= startIdx && selectedIntervalIndex < endIdx) {
+                        val offsetY = startY + (selectedIntervalIndex - startIdx) * stepY
+                        val ei = exportIntervals
+                        if (ei != null) {
+                            val interval = ei[selectedIntervalIndex]
+                            val waveW = width - 2 * paddingPx
+                            val drawX1 = max(0f, frameToX(interval[0])) + paddingPx
+                            val drawX2 = min(waveW.toFloat(), frameToX(interval[1])) + paddingPx
+                            val tapTop = offsetY - stepY / 2f
+                            val tapBottom = offsetY + stripH + stepY / 2f
+                            if (e.x >= drawX1 && e.x <= drawX2 && e.y >= tapTop && e.y <= tapBottom) {
+                                setIntervalsEditMode(false)
+                                listener?.onIntervalsModeChanged(false)
+                                return true
+                            }
                         }
                     }
                 }
@@ -1003,385 +1013,385 @@ class WaveformView @JvmOverloads constructor(
         return (prevSum <= 0f && curSum >= 0f) || (prevSum >= 0f && curSum <= 0f)
     }
     override fun onDraw(canvas: Canvas) {
-    val w = width
-    val h = height
-    if (w <= 0 || h <= 0) return
+        val w = width
+        val h = height
+        if (w <= 0 || h <= 0) return
 
-    val rulerH = rulerHeightPx
-    val waveTop = rulerH
-    val waveBottom = h
-    val waveH = waveBottom - waveTop
-    val centerY = waveTop + waveH / 2
+        val rulerH = rulerHeightPx
+        val waveTop = rulerH
+        val waveBottom = h
+        val waveH = waveBottom - waveTop
+        val centerY = waveTop + waveH / 2
 
-    canvas.drawRect(0f, 0f, w.toFloat(), rulerH.toFloat(), pRuler)
+        canvas.drawRect(0f, 0f, w.toFloat(), rulerH.toFloat(), pRuler)
 
-    canvas.save()
-    canvas.translate(paddingPx.toFloat(), 0f)
-    val waveWidth = w - 2 * paddingPx
-    lastWaveTop = waveTop
-    lastWaveBottom = waveBottom
-    lastWaveWidth = waveWidth
+        canvas.save()
+        canvas.translate(paddingPx.toFloat(), 0f)
+        val waveWidth = w - 2 * paddingPx
+        lastWaveTop = waveTop
+        lastWaveBottom = waveBottom
+        lastWaveWidth = waveWidth
 
-    drawRuler(canvas, waveWidth, rulerH)
+        drawRuler(canvas, waveWidth, rulerH)
 
-    if (pcm == null || totalFrames == 0) {
-        drawCenterLine(canvas, centerY, waveWidth)
+        if (pcm == null || totalFrames == 0) {
+            drawCenterLine(canvas, centerY, waveWidth)
+            canvas.restore()
+            return
+        }
+
+        drawGrid(canvas, waveWidth, waveTop, waveBottom)
+
+        val zeroX = frameToX(0)
+        val endX = frameToX(totalFrames)
+        val startX = max(0, zeroX.toInt())
+        val endXInt = min(waveWidth, endX.toInt())
+
+        drawEmptySpace(canvas, zeroX, endX, waveWidth, waveTop, waveBottom)
+
+        if (peakCacheWidth != waveWidth || peakCacheStart != viewStartFrame
+            || peakCacheFpp != viewFramesPerPixel) {
+            buildPeakCache(waveWidth)
+        }
+
+        drawLevels(canvas, waveTop, waveBottom, waveH, centerY, startX, endXInt)
+        drawSelectionBackground(canvas, waveTop, waveBottom)
+        drawWaveform(canvas, waveWidth, waveTop, waveBottom, waveH, centerY, startX, endXInt)
+        drawSelectionBorder(canvas, waveTop, waveBottom)
+        drawMarkers(canvas, waveWidth, waveTop, waveBottom)
+        drawExportIntervals(canvas, waveWidth, waveTop)
+
+        if (intervalsEditMode && exportIntervals != null) {
+            drawIntervalsEditMode(canvas, waveWidth, waveTop, waveBottom)
+        }
+
+        drawPlayheads(canvas, waveWidth, waveTop, waveBottom)
+
         canvas.restore()
-        return
+
+        drawAmpScale(canvas, w - ampScaleWidthPx, w, waveTop, waveBottom, waveH)
+        drawChannelCheckboxes(canvas, w, waveTop, waveH)
     }
 
-    drawGrid(canvas, waveWidth, waveTop, waveBottom)
-
-    val zeroX = frameToX(0)
-    val endX = frameToX(totalFrames)
-    val startX = max(0, zeroX.toInt())
-    val endXInt = min(waveWidth, endX.toInt())
-
-    drawEmptySpace(canvas, zeroX, endX, waveWidth, waveTop, waveBottom)
-
-    if (peakCacheWidth != waveWidth || peakCacheStart != viewStartFrame
-        || peakCacheFpp != viewFramesPerPixel) {
-        buildPeakCache(waveWidth)
+    private fun drawEmptySpace(canvas: Canvas, zeroX: Float, endX: Float, waveWidth: Int,
+        waveTop: Int, waveBottom: Int) {
+        if (zeroX > 0) canvas.drawRect(0f, waveTop.toFloat(), zeroX, waveBottom.toFloat(), pEmpty)
+        if (endX < waveWidth) canvas.drawRect(endX, waveTop.toFloat(), waveWidth.toFloat(),
+            waveBottom.toFloat(), pEmpty)
     }
 
-    drawLevels(canvas, waveTop, waveBottom, waveH, centerY, startX, endXInt)
-    drawSelectionBackground(canvas, waveTop, waveBottom)
-    drawWaveform(canvas, waveWidth, waveTop, waveBottom, waveH, centerY, startX, endXInt)
-    drawSelectionBorder(canvas, waveTop, waveBottom)
-    drawMarkers(canvas, waveWidth, waveTop, waveBottom)
-    drawExportIntervals(canvas, waveWidth, waveTop)
-
-    if (intervalsEditMode && exportIntervals != null) {
-        drawIntervalsEditMode(canvas, waveWidth, waveTop, waveBottom)
+    private fun drawLevels(canvas: Canvas, waveTop: Int, waveBottom: Int, waveH: Int,
+        centerY: Int, startX: Int, endXInt: Int) {
+        if (startX >= endXInt) return
+        if (stereoView) {
+            drawHorizontalLevels(canvas, waveTop + waveH / 4, waveH * 0.25f - 2, waveTop,
+                waveTop + waveH / 2, startX, endXInt)
+            drawHorizontalLevels(canvas, waveTop + 3 * waveH / 4, waveH * 0.25f - 2,
+                waveTop + waveH / 2, waveBottom, startX, endXInt)
+        } else {
+            drawHorizontalLevels(canvas, centerY, waveH * 0.5f - 2, waveTop, waveBottom, startX,
+                endXInt)
+        }
     }
 
-    drawPlayheads(canvas, waveWidth, waveTop, waveBottom)
-
-    canvas.restore()
-
-    drawAmpScale(canvas, w - ampScaleWidthPx, w, waveTop, waveBottom, waveH)
-    drawChannelCheckboxes(canvas, w, waveTop, waveH)
-}
-
-private fun drawEmptySpace(canvas: Canvas, zeroX: Float, endX: Float, waveWidth: Int,
-                           waveTop: Int, waveBottom: Int) {
-    if (zeroX > 0) canvas.drawRect(0f, waveTop.toFloat(), zeroX, waveBottom.toFloat(), pEmpty)
-    if (endX < waveWidth) canvas.drawRect(endX, waveTop.toFloat(), waveWidth.toFloat(),
-        waveBottom.toFloat(), pEmpty)
-}
-
-private fun drawLevels(canvas: Canvas, waveTop: Int, waveBottom: Int, waveH: Int,
-                       centerY: Int, startX: Int, endXInt: Int) {
-    if (startX >= endXInt) return
-    if (stereoView) {
-        drawHorizontalLevels(canvas, waveTop + waveH / 4, waveH * 0.25f - 2, waveTop,
-            waveTop + waveH / 2, startX, endXInt)
-        drawHorizontalLevels(canvas, waveTop + 3 * waveH / 4, waveH * 0.25f - 2,
-            waveTop + waveH / 2, waveBottom, startX, endXInt)
-    } else {
-        drawHorizontalLevels(canvas, centerY, waveH * 0.5f - 2, waveTop, waveBottom, startX,
-            endXInt)
+    private fun drawSelectionBackground(canvas: Canvas, waveTop: Int, waveBottom: Int) {
+        if (!hasSelection()) return
+        val sx0 = frameToX(selStart)
+        val sx1 = frameToX(selEnd)
+        canvas.drawRect(sx0, waveTop.toFloat(), sx1, waveBottom.toFloat(), pSel)
     }
-}
 
-private fun drawSelectionBackground(canvas: Canvas, waveTop: Int, waveBottom: Int) {
-    if (!hasSelection()) return
-    val sx0 = frameToX(selStart)
-    val sx1 = frameToX(selEnd)
-    canvas.drawRect(sx0, waveTop.toFloat(), sx1, waveBottom.toFloat(), pSel)
-}
+    private fun drawWaveform(canvas: Canvas, waveWidth: Int, waveTop: Int, waveBottom: Int,
+        waveH: Int, centerY: Int, startX: Int, endXInt: Int) {
+        val pMin = peakMin
+        val pMax = peakMax
+        if (pMin == null || pMax == null || startX >= endXInt) return
 
-private fun drawWaveform(canvas: Canvas, waveWidth: Int, waveTop: Int, waveBottom: Int,
-                         waveH: Int, centerY: Int, startX: Int, endXInt: Int) {
-    val pMin = peakMin
-    val pMax = peakMax
-    if (pMin == null || pMax == null || startX >= endXInt) return
-
-    if (stereoView) {
-        val halfH = waveH * 0.25f - 2
-        val topCenter = waveTop + waveH / 4
-        val botCenter = waveTop + 3 * waveH / 4
-        drawWaveChannel(canvas, pMax, pMin, waveWidth, startX, endXInt, topCenter, halfH)
-        drawWaveChannel(canvas, peakMaxR!!, peakMinR!!, waveWidth, startX, endXInt, botCenter,
-            halfH)
-        drawCenterLine(canvas, centerY, waveWidth)
-    } else {
-        val halfH = waveH * 0.5f - 2
-        drawWaveChannel(canvas, peakMaxMono!!, peakMinMono!!, waveWidth, startX, endXInt,
-            centerY, halfH)
-        drawCenterLine(canvas, centerY, waveWidth)
+        if (stereoView) {
+            val halfH = waveH * 0.25f - 2
+            val topCenter = waveTop + waveH / 4
+            val botCenter = waveTop + 3 * waveH / 4
+            drawWaveChannel(canvas, pMax, pMin, waveWidth, startX, endXInt, topCenter, halfH)
+            drawWaveChannel(canvas, peakMaxR!!, peakMinR!!, waveWidth, startX, endXInt, botCenter,
+                halfH)
+            drawCenterLine(canvas, centerY, waveWidth)
+        } else {
+            val halfH = waveH * 0.5f - 2
+            drawWaveChannel(canvas, peakMaxMono!!, peakMinMono!!, waveWidth, startX, endXInt,
+                centerY, halfH)
+            drawCenterLine(canvas, centerY, waveWidth)
+        }
     }
-}
 
-private fun drawWaveChannel(canvas: Canvas, max: FloatArray, min: FloatArray, waveWidth: Int,
-                            startX: Int, endXInt: Int, centerY: Int, halfH: Float) {
-    wavePath.reset()
-    for (x in startX until endXInt) {
-        val y = centerY - max[x] * halfH
-        if (x == startX) wavePath.moveTo(x.toFloat(), y)
-        else wavePath.lineTo(x.toFloat(), y)
+    private fun drawWaveChannel(canvas: Canvas, max: FloatArray, min: FloatArray, waveWidth: Int,
+        startX: Int, endXInt: Int, centerY: Int, halfH: Float) {
+        wavePath.reset()
+        for (x in startX until endXInt) {
+            val y = centerY - max[x] * halfH
+            if (x == startX) wavePath.moveTo(x.toFloat(), y)
+            else wavePath.lineTo(x.toFloat(), y)
+        }
+        for (x in endXInt - 1 downTo startX) {
+            val y = centerY - min[x] * halfH
+            wavePath.lineTo(x.toFloat(), y)
+        }
+        wavePath.close()
+        canvas.drawPath(wavePath, pWaveFill)
+        canvas.drawPath(wavePath, pWave)
     }
-    for (x in endXInt - 1 downTo startX) {
-        val y = centerY - min[x] * halfH
-        wavePath.lineTo(x.toFloat(), y)
+
+    private fun drawSelectionBorder(canvas: Canvas, waveTop: Int, waveBottom: Int) {
+        if (!hasSelection()) return
+        val sx0 = frameToX(selStart)
+        val sx1 = frameToX(selEnd)
+        canvas.drawLine(sx0, waveTop.toFloat(), sx0, waveBottom.toFloat(), pSelBorder)
+        canvas.drawLine(sx1, waveTop.toFloat(), sx1, waveBottom.toFloat(), pSelBorder)
+        drawHandle(canvas, sx0, waveTop, waveBottom)
+        drawHandle(canvas, sx1, waveTop, waveBottom)
     }
-    wavePath.close()
-    canvas.drawPath(wavePath, pWaveFill)
-    canvas.drawPath(wavePath, pWave)
-}
 
-private fun drawSelectionBorder(canvas: Canvas, waveTop: Int, waveBottom: Int) {
-    if (!hasSelection()) return
-    val sx0 = frameToX(selStart)
-    val sx1 = frameToX(selEnd)
-    canvas.drawLine(sx0, waveTop.toFloat(), sx0, waveBottom.toFloat(), pSelBorder)
-    canvas.drawLine(sx1, waveTop.toFloat(), sx1, waveBottom.toFloat(), pSelBorder)
-    drawHandle(canvas, sx0, waveTop, waveBottom)
-    drawHandle(canvas, sx1, waveTop, waveBottom)
-}
-
-/** B11: номера на верхнем и нижнем флажках. F11: «призрак» при drag. */
-private fun drawMarkers(canvas: Canvas, waveWidth: Int, waveTop: Int, waveBottom: Int) {
-    val m = markers ?: return
-    var num = 1
-    for (mk in m) {
-        val drawFrame = if (dragMode == DRAG_MARKER && mk == dragMarkerOldFrame)
+    /** B11: номера на верхнем и нижнем флажках. F11: «призрак» при drag. */
+    private fun drawMarkers(canvas: Canvas, waveWidth: Int, waveTop: Int, waveBottom: Int) {
+        val m = markers ?: return
+        var num = 1
+        for (mk in m) {
+            val drawFrame = if (dragMode == DRAG_MARKER && mk == dragMarkerOldFrame)
             dragMarkerFrame else mk
-        val x = frameToX(drawFrame)
-        if (x < -markerFlagW || x > waveWidth + markerFlagW) {
+            val x = frameToX(drawFrame)
+            if (x < -markerFlagW || x > waveWidth + markerFlagW) {
+                num++
+                continue
+            }
+            canvas.drawLine(x, waveTop.toFloat(), x, waveBottom.toFloat(), pMarker)
+
+            val flag = Path()
+            flag.moveTo(x, (waveTop + 2).toFloat())
+            flag.lineTo((x + markerFlagW), (waveTop + 2).toFloat())
+            flag.lineTo((x + markerFlagW), (waveTop + 2 + markerFlagH / 2).toFloat())
+            flag.lineTo(x, (waveTop + 2 + markerFlagH).toFloat())
+            flag.close()
+            canvas.drawPath(flag, pMarkerFill)
+
+            val botY = (waveBottom - markerFlagH - 2).toFloat()
+            val flag2 = Path()
+            flag2.moveTo(x, botY)
+            flag2.lineTo(x + markerFlagW, botY)
+            flag2.lineTo(x + markerFlagW, botY + markerFlagH / 2f)
+            flag2.lineTo(x, botY + markerFlagH)
+            flag2.close()
+            canvas.drawPath(flag2, pMarkerFill)
+
+            val label = num.toString()
+            val textW = pMarkerText.measureText(label)
+            val textX = x + markerFlagW / 2f - textW / 2f
+            val textSize = pMarkerText.textSize
+
+            val topTextY = waveTop + 2 + markerFlagH / 2f + textSize / 3f
+            canvas.drawText(label, textX, topTextY, pMarkerText)
+
+            val botTextY = botY + markerFlagH / 2f + textSize / 3f
+            canvas.drawText(label, textX, botTextY, pMarkerText)
+
             num++
-            continue
         }
-        canvas.drawLine(x, waveTop.toFloat(), x, waveBottom.toFloat(), pMarker)
-
-        val flag = Path()
-        flag.moveTo(x, (waveTop + 2).toFloat())
-        flag.lineTo((x + markerFlagW), (waveTop + 2).toFloat())
-        flag.lineTo((x + markerFlagW), (waveTop + 2 + markerFlagH / 2).toFloat())
-        flag.lineTo(x, (waveTop + 2 + markerFlagH).toFloat())
-        flag.close()
-        canvas.drawPath(flag, pMarkerFill)
-
-        val botY = (waveBottom - markerFlagH - 2).toFloat()
-        val flag2 = Path()
-        flag2.moveTo(x, botY)
-        flag2.lineTo(x + markerFlagW, botY)
-        flag2.lineTo(x + markerFlagW, botY + markerFlagH / 2f)
-        flag2.lineTo(x, botY + markerFlagH)
-        flag2.close()
-        canvas.drawPath(flag2, pMarkerFill)
-
-        val label = num.toString()
-        val textW = pMarkerText.measureText(label)
-        val textX = x + markerFlagW / 2f - textW / 2f
-        val textSize = pMarkerText.textSize
-
-        val topTextY = waveTop + 2 + markerFlagH / 2f + textSize / 3f
-        canvas.drawText(label, textX, topTextY, pMarkerText)
-
-        val botTextY = botY + markerFlagH / 2f + textSize / 3f
-        canvas.drawText(label, textX, botTextY, pMarkerText)
-
-        num++
     }
-}
 
-private fun drawPlayheads(canvas: Canvas, waveWidth: Int, waveTop: Int, waveBottom: Int) {
-    val px = frameToX(playheadFrame)
-    if (px >= 0 && px <= waveWidth) {
-        canvas.drawLine(px, waveTop.toFloat(), px, waveBottom.toFloat(), pPlayhead)
-        canvas.drawRect(px - 5, waveTop.toFloat(), px + 5, (waveTop + 8).toFloat(), pPlayhead)
+    private fun drawPlayheads(canvas: Canvas, waveWidth: Int, waveTop: Int, waveBottom: Int) {
+        val px = frameToX(playheadFrame)
+        if (px >= 0 && px <= waveWidth) {
+            canvas.drawLine(px, waveTop.toFloat(), px, waveBottom.toFloat(), pPlayhead)
+            canvas.drawRect(px - 5, waveTop.toFloat(), px + 5, (waveTop + 8).toFloat(), pPlayhead)
+        }
+        val activePx = frameToX(activePlayFrame)
+        if (activePx >= 0 && activePx <= waveWidth && activePlayFrame != playheadFrame) {
+            canvas.drawLine(activePx, waveTop.toFloat(), activePx, waveBottom.toFloat(),
+                pActivePlayhead)
+        }
     }
-    val activePx = frameToX(activePlayFrame)
-    if (activePx >= 0 && activePx <= waveWidth && activePlayFrame != playheadFrame) {
-        canvas.drawLine(activePx, waveTop.toFloat(), activePx, waveBottom.toFloat(),
-            pActivePlayhead)
+
+    private fun drawChannelCheckboxes(canvas: Canvas, w: Int, waveTop: Int, waveH: Int) {
+        if (!stereoView) return
+        if (checkLx == 0f && checkLy == 0f) updateCheckboxPositions(w, height)
+
+        drawCheckbox(canvas, checkLx, checkLy, channelL)
+        pChannelText.color = if (channelL) 0xFF0E0E10.toInt() else 0xFFE8E8EA.toInt()
+        canvas.drawText("L", checkLx + checkSize / 2f - 10, checkLy + checkSize / 2f + 10,
+            pChannelText)
+
+        drawCheckbox(canvas, checkRx, checkRy, channelR)
+        pChannelText.color = if (channelR) 0xFF0E0E10.toInt() else 0xFFE8E8EA.toInt()
+        canvas.drawText("R", checkRx + checkSize / 2f - 10, checkRy + checkSize / 2f + 10,
+            pChannelText)
     }
-}
 
-private fun drawChannelCheckboxes(canvas: Canvas, w: Int, waveTop: Int, waveH: Int) {
-    if (!stereoView) return
-    if (checkLx == 0f && checkLy == 0f) updateCheckboxPositions(w, height)
+    private fun drawExportIntervals(canvas: Canvas, waveWidth: Int, waveTop: Int) {
+        val ei = exportIntervals
+        if (ei == null || ei.isEmpty()) return
+        if (intervalsEditMode) return
 
-    drawCheckbox(canvas, checkLx, checkLy, channelL)
-    pChannelText.color = if (channelL) 0xFF0E0E10.toInt() else 0xFFE8E8EA.toInt()
-    canvas.drawText("L", checkLx + checkSize / 2f - 10, checkLy + checkSize / 2f + 10,
-        pChannelText)
+        val layout = calcStripLayout()
+        val startY = layout[0]
+        val stripH = 8f
+        val count = layout[2].toInt()
+        val startIdx = layout[3].toInt()
+        val endIdx = layout[4].toInt()
 
-    drawCheckbox(canvas, checkRx, checkRy, channelR)
-    pChannelText.color = if (channelR) 0xFF0E0E10.toInt() else 0xFFE8E8EA.toInt()
-    canvas.drawText("R", checkRx + checkSize / 2f - 10, checkRy + checkSize / 2f + 10,
-        pChannelText)
-}
+        if (count <= 0) return
 
-private fun drawExportIntervals(canvas: Canvas, waveWidth: Int, waveTop: Int) {
-    val ei = exportIntervals
-    if (ei == null || ei.isEmpty()) return
-    if (intervalsEditMode) return
+        var offsetY = startY
+        for (i in startIdx until endIdx) {
+            val interval = ei[i]
+            val x1 = frameToX(interval[0])
+            val x2 = frameToX(interval[1])
 
-    val layout = calcStripLayout()
-    val startY = layout[0]
-    val stripH = 8f
-    val count = layout[2].toInt()
-    val startIdx = layout[3].toInt()
-    val endIdx = layout[4].toInt()
+            if (x2 < 0 || x1 > waveWidth) {
+                offsetY += stripH + 8f
+                continue
+            }
 
-    if (count <= 0) return
+            val drawX1 = max(0f, x1)
+            val drawX2 = min(waveWidth.toFloat(), x2)
 
-    var offsetY = startY
-    for (i in startIdx until endIdx) {
-        val interval = ei[i]
-        val x1 = frameToX(interval[0])
-        val x2 = frameToX(interval[1])
+            tmpRect.set(drawX1, offsetY, drawX2, offsetY + stripH)
+            canvas.drawRoundRect(tmpRect, 4f, 4f, pIntervalFillNormal)
 
-        if (x2 < 0 || x1 > waveWidth) {
             offsetY += stripH + 8f
-            continue
         }
-
-        val drawX1 = max(0f, x1)
-        val drawX2 = min(waveWidth.toFloat(), x2)
-
-        tmpRect.set(drawX1, offsetY, drawX2, offsetY + stripH)
-        canvas.drawRoundRect(tmpRect, 4f, 4f, pIntervalFillNormal)
-
-        offsetY += stripH + 8f
     }
-}
 
-private fun drawCheckbox(c: Canvas, x: Float, y: Float, checked: Boolean) {
-    val cornerRadius = 8f * resources.displayMetrics.density
-    tmpRect.set(x, y, x + checkSize, y + checkSize)
-    c.drawRoundRect(tmpRect, cornerRadius, cornerRadius,
-        if (checked) pCheckboxBgOn else pCheckboxBgOff)
-    c.drawRoundRect(tmpRect, cornerRadius, cornerRadius,
-        if (checked) pCheckboxBorderOn else pCheckboxBorderOff)
-}
-
-private fun chooseStep(visibleSec: Double): Double {
-    val steps = doubleArrayOf(0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0)
-    var step = steps[steps.size - 1]
-    for (s in steps) {
-        if (visibleSec / s < 12) { step = s; break }
+    private fun drawCheckbox(c: Canvas, x: Float, y: Float, checked: Boolean) {
+        val cornerRadius = 8f * resources.displayMetrics.density
+        tmpRect.set(x, y, x + checkSize, y + checkSize)
+        c.drawRoundRect(tmpRect, cornerRadius, cornerRadius,
+            if (checked) pCheckboxBgOn else pCheckboxBgOff)
+        c.drawRoundRect(tmpRect, cornerRadius, cornerRadius,
+            if (checked) pCheckboxBorderOn else pCheckboxBorderOff)
     }
-    return step
-}
 
-private fun drawRuler(canvas: Canvas, w: Int, rulerH: Int) {
-    if (sampleRate <= 0) return
-    val visibleSec = w * viewFramesPerPixel / sampleRate
-    val step = chooseStep(visibleSec)
-    val startSec = viewStartFrame / sampleRate
-    val firstMark = ceil(startSec / step) * step
-    val endSec = (viewStartFrame + w * viewFramesPerPixel) / sampleRate
+    private fun chooseStep(visibleSec: Double): Double {
+        val steps = doubleArrayOf(0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0)
+        var step = steps[steps.size - 1]
+        for (s in steps) {
+            if (visibleSec / s < 12) { step = s; break }
+        }
+        return step
+    }
 
-    var t = firstMark
-    while (t <= endSec) {
-        if (t >= 0 && t * sampleRate <= totalFrames) {
-            val x = ((t * sampleRate - viewStartFrame) / viewFramesPerPixel).toFloat()
-            if (x in 0f..w.toFloat()) {
-                canvas.drawLine(x, (rulerH - 6).toFloat(), x, rulerH.toFloat(), pGrid)
-                val label = if (step < 1.0) {
-                    String.format(Locale.US, "%.0fms", t * 1000)
-                } else {
-                    val sec = t.toInt()
-                    "${sec / 60}:" + String.format(Locale.US, "%02d", sec % 60)
+    private fun drawRuler(canvas: Canvas, w: Int, rulerH: Int) {
+        if (sampleRate <= 0) return
+        val visibleSec = w * viewFramesPerPixel / sampleRate
+        val step = chooseStep(visibleSec)
+        val startSec = viewStartFrame / sampleRate
+        val firstMark = ceil(startSec / step) * step
+        val endSec = (viewStartFrame + w * viewFramesPerPixel) / sampleRate
+
+        var t = firstMark
+        while (t <= endSec) {
+            if (t >= 0 && t * sampleRate <= totalFrames) {
+                val x = ((t * sampleRate - viewStartFrame) / viewFramesPerPixel).toFloat()
+                if (x in 0f..w.toFloat()) {
+                    canvas.drawLine(x, (rulerH - 6).toFloat(), x, rulerH.toFloat(), pGrid)
+                    val label = if (step < 1.0) {
+                        String.format(Locale.US, "%.0fms", t * 1000)
+                    } else {
+                        val sec = t.toInt()
+                        "${sec / 60}:" + String.format(Locale.US, "%02d", sec % 60)
+                    }
+                    canvas.drawText(label, x + 3, (rulerH - 9).toFloat(), pRulerText)
                 }
-                canvas.drawText(label, x + 3, (rulerH - 9).toFloat(), pRulerText)
+            }
+            t += step
+        }
+    }
+
+    private fun drawGrid(canvas: Canvas, w: Int, top: Int, bottom: Int) {
+        if (sampleRate <= 0) return
+        val visibleSec = w * viewFramesPerPixel / sampleRate
+        val step = chooseStep(visibleSec)
+        val startSec = viewStartFrame / sampleRate
+        val firstMark = ceil(startSec / step) * step
+        val endSec = (viewStartFrame + w * viewFramesPerPixel) / sampleRate
+
+        var t = firstMark
+        while (t <= endSec) {
+            if (t >= 0 && t * sampleRate <= totalFrames) {
+                val x = ((t * sampleRate - viewStartFrame) / viewFramesPerPixel).toFloat()
+                if (x in 0f..w.toFloat()) {
+                    canvas.drawLine(x, top.toFloat(), x, bottom.toFloat(), pGrid)
+                }
+            }
+            t += step
+        }
+    }
+
+    private fun drawHandle(canvas: Canvas, x: Float, top: Int, bottom: Int) {
+        val cyTop = (top + handleHalfPx).toFloat()
+        val cyBot = (bottom - handleHalfPx).toFloat()
+        canvas.drawCircle(x, cyTop, handleHalfPx.toFloat(), pSelBorder)
+        canvas.drawCircle(x, cyBot, handleHalfPx.toFloat(), pSelBorder)
+        canvas.drawLine(x, cyTop, x, cyBot, pSelBorder)
+    }
+
+    /** B9: без labels. */
+    private fun drawHorizontalLevels(canvas: Canvas, centerY: Int, halfH: Float, top: Int,
+        bottom: Int, x0: Int, x1: Int) {
+        val levels = floatArrayOf(0f, 0.5f, 0.7f, 0.9f, 0.999f)
+        for (amp in levels) {
+            val dy = amp * halfH
+            val yTop = centerY - dy
+            if (yTop >= top && yTop <= bottom) {
+                canvas.drawLine(x0.toFloat(), yTop, x1.toFloat(), yTop, pHGrid)
+            }
+            val yBot = centerY + dy
+            if (yBot >= top && yBot <= bottom) {
+                canvas.drawLine(x0.toFloat(), yBot, x1.toFloat(), yBot, pHGrid)
             }
         }
-        t += step
     }
-}
 
-private fun drawGrid(canvas: Canvas, w: Int, top: Int, bottom: Int) {
-    if (sampleRate <= 0) return
-    val visibleSec = w * viewFramesPerPixel / sampleRate
-    val step = chooseStep(visibleSec)
-    val startSec = viewStartFrame / sampleRate
-    val firstMark = ceil(startSec / step) * step
-    val endSec = (viewStartFrame + w * viewFramesPerPixel) / sampleRate
+    private fun drawCenterLine(canvas: Canvas, centerY: Int, waveWidth: Int) {
+        val zeroX = frameToX(0)
+        val endX = frameToX(totalFrames)
+        val startDraw = max(0f, zeroX)
+        val endDraw = min(waveWidth.toFloat(), endX)
+        if (startDraw < endDraw) {
+            canvas.drawLine(startDraw, centerY.toFloat(), endDraw, centerY.toFloat(), pCenter)
+        }
+    }
 
-    var t = firstMark
-    while (t <= endSec) {
-        if (t >= 0 && t * sampleRate <= totalFrames) {
-            val x = ((t * sampleRate - viewStartFrame) / viewFramesPerPixel).toFloat()
-            if (x in 0f..w.toFloat()) {
-                canvas.drawLine(x, top.toFloat(), x, bottom.toFloat(), pGrid)
+    private fun drawAmpScale(canvas: Canvas, scaleX: Int, w: Int, top: Int, bottom: Int,
+        waveH: Int) {
+        canvas.drawRect(scaleX.toFloat(), top.toFloat(), w.toFloat(), bottom.toFloat(), pScaleBg)
+        val halfH = waveH * 0.5f - 2
+        if (stereoView) {
+            drawScaleHalf(canvas, scaleX, w, top, top + waveH / 2, waveH * 0.25f - 2)
+            drawScaleHalf(canvas, scaleX, w, top + waveH / 2, bottom, waveH * 0.25f - 2)
+        } else {
+            drawScaleHalf(canvas, scaleX, w, top, bottom, halfH)
+        }
+    }
+
+    private fun drawScaleHalf(canvas: Canvas, scaleX: Int, w: Int, top: Int, bottom: Int,
+        halfH: Float) {
+        val centerY = (top + bottom) / 2
+        val levels = floatArrayOf(0f, 0.5f, 0.7f, 0.9f, 0.999f)
+        val labels = arrayOf("-inf", "-6", "-3", "-1", "0")
+        for (i in levels.indices) {
+            val amp = levels[i]
+            val dy = amp * halfH
+            val yTop = centerY - dy
+            val yBot = centerY + dy
+            if (yTop >= top && yTop <= bottom) {
+                canvas.drawLine(scaleX.toFloat(), yTop, (scaleX + 6).toFloat(), yTop, pAmpScale)
+                canvas.drawText(labels[i], (scaleX + 8).toFloat(), yTop + 3, pAmpText)
+            }
+            if (i > 0 && yBot >= top && yBot <= bottom) {
+                canvas.drawLine(scaleX.toFloat(), yBot, (scaleX + 6).toFloat(), yBot, pAmpScale)
             }
         }
-        t += step
     }
-}
-
-private fun drawHandle(canvas: Canvas, x: Float, top: Int, bottom: Int) {
-    val cyTop = (top + handleHalfPx).toFloat()
-    val cyBot = (bottom - handleHalfPx).toFloat()
-    canvas.drawCircle(x, cyTop, handleHalfPx.toFloat(), pSelBorder)
-    canvas.drawCircle(x, cyBot, handleHalfPx.toFloat(), pSelBorder)
-    canvas.drawLine(x, cyTop, x, cyBot, pSelBorder)
-}
-
-/** B9: без labels. */
-private fun drawHorizontalLevels(canvas: Canvas, centerY: Int, halfH: Float, top: Int,
-                                 bottom: Int, x0: Int, x1: Int) {
-    val levels = floatArrayOf(0f, 0.5f, 0.7f, 0.9f, 0.999f)
-    for (amp in levels) {
-        val dy = amp * halfH
-        val yTop = centerY - dy
-        if (yTop >= top && yTop <= bottom) {
-            canvas.drawLine(x0.toFloat(), yTop, x1.toFloat(), yTop, pHGrid)
-        }
-        val yBot = centerY + dy
-        if (yBot >= top && yBot <= bottom) {
-            canvas.drawLine(x0.toFloat(), yBot, x1.toFloat(), yBot, pHGrid)
-        }
-    }
-}
-
-private fun drawCenterLine(canvas: Canvas, centerY: Int, waveWidth: Int) {
-    val zeroX = frameToX(0)
-    val endX = frameToX(totalFrames)
-    val startDraw = max(0f, zeroX)
-    val endDraw = min(waveWidth.toFloat(), endX)
-    if (startDraw < endDraw) {
-        canvas.drawLine(startDraw, centerY.toFloat(), endDraw, centerY.toFloat(), pCenter)
-    }
-}
-
-private fun drawAmpScale(canvas: Canvas, scaleX: Int, w: Int, top: Int, bottom: Int,
-                         waveH: Int) {
-    canvas.drawRect(scaleX.toFloat(), top.toFloat(), w.toFloat(), bottom.toFloat(), pScaleBg)
-    val halfH = waveH * 0.5f - 2
-    if (stereoView) {
-        drawScaleHalf(canvas, scaleX, w, top, top + waveH / 2, waveH * 0.25f - 2)
-        drawScaleHalf(canvas, scaleX, w, top + waveH / 2, bottom, waveH * 0.25f - 2)
-    } else {
-        drawScaleHalf(canvas, scaleX, w, top, bottom, halfH)
-    }
-}
-
-private fun drawScaleHalf(canvas: Canvas, scaleX: Int, w: Int, top: Int, bottom: Int,
-                          halfH: Float) {
-    val centerY = (top + bottom) / 2
-    val levels = floatArrayOf(0f, 0.5f, 0.7f, 0.9f, 0.999f)
-    val labels = arrayOf("-inf", "-6", "-3", "-1", "0")
-    for (i in levels.indices) {
-        val amp = levels[i]
-        val dy = amp * halfH
-        val yTop = centerY - dy
-        val yBot = centerY + dy
-        if (yTop >= top && yTop <= bottom) {
-            canvas.drawLine(scaleX.toFloat(), yTop, (scaleX + 6).toFloat(), yTop, pAmpScale)
-            canvas.drawText(labels[i], (scaleX + 8).toFloat(), yTop + 3, pAmpText)
-        }
-        if (i > 0 && yBot >= top && yBot <= bottom) {
-            canvas.drawLine(scaleX.toFloat(), yBot, (scaleX + 6).toFloat(), yBot, pAmpScale)
-        }
-    }
-}
     private fun drawIntervalsEditMode(canvas: Canvas, waveWidth: Int, waveTop: Int,
-                                      waveBottom: Int) {
+        waveBottom: Int) {
         val ei = exportIntervals
         if (ei == null || ei.isEmpty()) return
 
@@ -1418,7 +1428,7 @@ private fun drawScaleHalf(canvas: Canvas, scaleX: Int, w: Int, top: Int, bottom:
             }
 
             val label = "${i + 1}: ${formatMsForStrip(interval[0])} – " +
-                    formatMsForStrip(interval[1])
+            formatMsForStrip(interval[1])
             canvas.drawText(label, drawX1 + 8, offsetY + stripH / 2 + 4, pIntervalText)
 
             offsetY += stripH + 8f
@@ -1448,7 +1458,7 @@ private fun drawScaleHalf(canvas: Canvas, scaleX: Int, w: Int, top: Int, bottom:
         val stripH: Float
         if (intervalsEditMode) {
             stripH = min(40f, waveH.toFloat() / max(1, count + 1))
-                .coerceAtLeast(24f)
+            .coerceAtLeast(24f)
         } else {
             stripH = 8f
         }

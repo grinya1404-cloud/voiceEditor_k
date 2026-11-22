@@ -109,6 +109,8 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         wireTransport()
         wireTools()
         updateDynamicButtons()
+        // Инициализация видимости кнопок перелистывания
+        updateIntervalPagingButtons(false)
     }
 
     private fun wireToolbar() {
@@ -164,7 +166,9 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                         true
                     }
                     4 -> {
-                        EditActivityHolder.current = c
+                        val s = if (wave?.hasSelection() == true) wave!!.getSelStart() else -1
+                        val e = if (wave?.hasSelection() == true) wave!!.getSelEnd() else -1
+                        ExportToBankActivity.setSource(c, s, e)
                         startActivity(Intent(this, ExportToBankActivity::class.java))
                         true
                     }
@@ -629,6 +633,8 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
             c.clearExportIntervals()
             w.updateMarkers(c.markers)
             w.updateExportIntervals(c.exportIntervals)
+            w.setIntervalsEditMode(false) // <-- Выходим из режима
+            updateIntervalPagingButtons(false) // <-- Обновляем кнопки
             isChanged = true
         }.setNeutralButton("Закрыть", null).show()
     }
@@ -734,6 +740,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         val c = clip ?: return
         if (c.moveMarker(oldFrame, newFrame)) {
             refreshAfterChange()
+            updateIntervalPagingButtons() // <-- Обновляем кнопки
             Toast.makeText(this, "Маркер перемещён", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "Не удалось переместить (занято?)", Toast.LENGTH_SHORT).show()
@@ -760,6 +767,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
             } else if (c.addExportInterval(start, end)) {
                 Toast.makeText(this, "Интервал создан", Toast.LENGTH_SHORT).show()
                 w.updateExportIntervals(c.exportIntervals)
+                updateIntervalPagingButtons() // <-- Обновляем кнопки
                 isChanged = true
             } else {
                 Toast.makeText(this, "Не удалось создать интервал", Toast.LENGTH_SHORT).show()
@@ -792,6 +800,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                 "Отменить соединение" -> {
                     c.removeExportIntervalsWithMarker(frame)
                     w.updateExportIntervals(c.exportIntervals)
+                    updateIntervalPagingButtons() // <-- Обновляем кнопки
                     isChanged = true
                     Toast.makeText(this, "Соединение отменено", Toast.LENGTH_SHORT).show()
                 }
@@ -800,6 +809,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                     c.removeMarker(frame)
                     w.updateMarkers(c.markers)
                     w.updateExportIntervals(c.exportIntervals)
+                    updateIntervalPagingButtons() // <-- Обновляем кнопки
                     isChanged = true
                 }
             }
@@ -835,7 +845,13 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                     c.removeExportInterval(startFrame, endFrame)
                     w.updateExportIntervals(c.exportIntervals)
                     isChanged = true
-                    if (c.exportIntervals.isEmpty()) w.setIntervalsEditMode(false)
+                    updateIntervalPagingButtons() // <-- Обновляем кнопки
+
+                    // Если интервалов не осталось — выходим из режима
+                    if (c.exportIntervals.isEmpty()) {
+                        w.setIntervalsEditMode(false)
+                        updateIntervalPagingButtons(false)
+                    }
                 }
                 2 -> {
                     ExportActivity.setForcedInterval(startFrame, endFrame)
@@ -853,7 +869,19 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
     }
 
     override fun onIntervalsModeChanged(enabled: Boolean) {
-        val vis = if (enabled) View.VISIBLE else View.GONE
+        updateIntervalPagingButtons(enabled)
+    }
+
+    private fun updateIntervalPagingButtons(forceMode: Boolean? = null) {
+        val w = wave ?: return
+        val isMode = forceMode ?: w.isIntervalsEditMode()
+        val count = w.getIntervalCount()
+        val pageSize = w.getIntervalPageSize()
+
+        // Показываем кнопки только в режиме интервалов И если их больше одной страницы
+        val show = isMode && count > pageSize
+        val vis = if (show) View.VISIBLE else View.GONE
+
         findViewById<View>(R.id.btnIntervalUp).visibility = vis
         findViewById<View>(R.id.btnIntervalDown).visibility = vis
     }

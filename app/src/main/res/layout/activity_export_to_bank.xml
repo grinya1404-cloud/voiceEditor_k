@@ -53,7 +53,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/onSurface"
-            android:text="Весь файл"
+            android:text="Один файл (весь клип)"
             android:checked="true" />
 
         <RadioButton
@@ -61,7 +61,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="@color/onSurface"
-            android:text="По маркерам (между ними)" />
+            android:text="По маркерам" />
     </RadioGroup>
 
     <!-- Кнопка создания нового банка -->
@@ -71,6 +71,7 @@
         android:layout_height="48dp"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
+        android:layout_marginTop="8dp"
         android:text="+ Создать новый банк"
         android:backgroundTint="@color/surface"
         android:textColor="@color/accent" />

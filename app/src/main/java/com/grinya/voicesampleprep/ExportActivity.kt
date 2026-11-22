@@ -136,11 +136,18 @@ class ExportActivity : AppCompatActivity() {
                 findViewById<RadioButton>(R.id.rbSingle).text = "Один файл (весь клип)"
             }
 
-            if (src.markers.size < 2) {
-                findViewById<RadioButton>(R.id.rbByMarkers).apply {
-                    isEnabled = false
-                    text = "По маркерам (нужно ≥ 2 маркера)"
-                }
+            // --- Динамический текст для режима маркеров/интервалов ---
+            val rbByMarkers = findViewById<RadioButton>(R.id.rbByMarkers)
+            val intervalsCount = src.exportIntervals.size
+            val markersCount = src.markers.size
+
+            if (intervalsCount > 0) {
+                rbByMarkers.text = "По интервалам ($intervalsCount)"
+            } else if (markersCount >= 2) {
+                rbByMarkers.text = "По маркерам ($markersCount)"
+            } else {
+                rbByMarkers.isEnabled = false
+                rbByMarkers.text = "По маркерам (нужно ≥ 2)"
             }
         } else {
             originalMeta = AudioMeta()
