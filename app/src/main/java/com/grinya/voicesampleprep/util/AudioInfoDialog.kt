@@ -82,8 +82,11 @@ object AudioInfoDialog {
     private fun showDialog(context: Context, title: String, text: String) {
         val view = LayoutInflater.from(context).inflate(R.layout.dialog_info, null)
         view.findViewById<TextView>(R.id.txtInfo).text = text
-        AlertDialog.Builder(context).setTitle(title).setView(view)
-            .setPositiveButton("OK", null).show()
+        AlertDialog.Builder(context)
+            .setTitle(title)
+            .setView(view)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun buildInfoText(

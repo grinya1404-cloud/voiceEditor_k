@@ -50,7 +50,7 @@ object AudioOps {
             val a = abs(v)
             if (a > peak) peak = a
         }
-        if (peak <= 1e-9f) return pcm.clone()
+        if (peak <= 1e-9f) return pcm.copyOf()
         val mul = target / peak
         return FloatArray(pcm.size) { pcm[it] * mul }
     }
@@ -65,7 +65,7 @@ object AudioOps {
     /** Линейный ресемплинг interleaved stereo. */
     @JvmStatic
     fun resample(pcm: FloatArray, srcRate: Int, dstRate: Int): FloatArray {
-        if (srcRate == dstRate) return pcm.clone()
+        if (srcRate == dstRate) return pcm.copyOf()
         val ch = 2
         val srcFrames = pcm.size / ch
         if (srcFrames == 0) return FloatArray(0)
@@ -138,7 +138,7 @@ object AudioOps {
         val totalFrames = pcm.size / ch
         val s = max(0, min(startFrame, totalFrames))
         val e = max(s, min(endFrame, totalFrames))
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         for (i in s * ch until e * ch step ch) {
             if (applyL) out[i] = 0f
             if (applyR) out[i + 1] = 0f
@@ -160,7 +160,7 @@ object AudioOps {
         val s = max(0, min(startFrame, totalFrames))
         val e = max(s, min(endFrame, totalFrames))
         val mul = 10.0.pow(dB / 20.0).toFloat()
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         for (i in s * ch until e * ch step ch) {
             if (applyL) out[i] *= mul
             if (applyR) out[i + 1] *= mul
@@ -186,9 +186,9 @@ object AudioOps {
             if (applyL) peak = max(peak, abs(pcm[i]))
             if (applyR) peak = max(peak, abs(pcm[i + 1]))
         }
-        if (peak <= 1e-9f) return pcm.clone()
+        if (peak <= 1e-9f) return pcm.copyOf()
         val mul = target / peak
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         for (i in s * ch until e * ch step ch) {
             if (applyL) out[i] *= mul
             if (applyR) out[i + 1] *= mul
@@ -199,7 +199,7 @@ object AudioOps {
     @JvmStatic
     fun fadeIn(pcm: FloatArray, fadeFrames: Int, applyL: Boolean, applyR: Boolean): FloatArray {
         val ch = 2
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         val totalFrames = out.size / ch
         val n = min(fadeFrames, totalFrames)
         for (i in 0 until n) {
@@ -214,7 +214,7 @@ object AudioOps {
     @JvmStatic
     fun fadeOut(pcm: FloatArray, fadeFrames: Int, applyL: Boolean, applyR: Boolean): FloatArray {
         val ch = 2
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         val totalFrames = out.size / ch
         val n = min(fadeFrames, totalFrames)
         for (i in 0 until n) {
@@ -253,7 +253,7 @@ object AudioOps {
         val totalFrames = pcm.size / ch
         val s = max(0, min(startFrame, totalFrames))
         val e = max(s, min(endFrame, totalFrames))
-        val out = pcm.clone()
+        val out = pcm.copyOf()
 
         val n = e - s
         for (i in 0 until n / 2) {
@@ -286,7 +286,7 @@ object AudioOps {
         val totalFrames = pcm.size / ch
         val s = max(0, min(startFrame, totalFrames))
         val e = max(s, min(endFrame, totalFrames))
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         for (i in s * ch until e * ch step ch) {
             if (applyL) out[i] *= -1f
             if (applyR) out[i + 1] *= -1f
@@ -358,9 +358,9 @@ object AudioOps {
         val s = max(0, min(startFrame, total))
         val e = max(s, min(endFrame, total))
         val n = min(fadeFrames, e - s)
-        if (n <= 0) return pcm.clone()
+        if (n <= 0) return pcm.copyOf()
 
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         for (i in 0 until n) {
             // C2: последний сэмпл достигает 1.0
             val g = if (n > 1) i.toFloat() / (n - 1) else 1f
@@ -385,9 +385,9 @@ object AudioOps {
         val s = max(0, min(startFrame, total))
         val e = max(s, min(endFrame, total))
         val n = min(fadeFrames, e - s)
-        if (n <= 0) return pcm.clone()
+        if (n <= 0) return pcm.copyOf()
 
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         for (i in 0 until n) {
             // C2: последний сэмпл достигает 0.0
             val g = if (n > 1) 1f - i.toFloat() / (n - 1) else 0f
@@ -457,7 +457,7 @@ object AudioOps {
         applyR: Boolean,
     ): FloatArray {
         val frames = pcm.size / 2
-        val out = pcm.clone()
+        val out = pcm.copyOf()
 
         val w0 = 2.0 * Math.PI * cutoffHz / sampleRate
         val cosW0 = cos(w0)
@@ -521,7 +521,7 @@ object AudioOps {
         val frames = pcm.size / ch
         if (frames == 0) return pcm
 
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         val threshold = 10.0.pow(thresholdDb / 20.0).toFloat()
         val holdFrames = max(1, holdMs * sampleRate / 1000)
         val window = max(1, sampleRate / 100) // 10 мс
@@ -581,7 +581,7 @@ object AudioOps {
         val threshold = 10.0.pow(thresholdDb / 20.0).toFloat()
         val reduction = 10.0.pow(-abs(reductionDb) / 20.0).toFloat()
 
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         for (start in 0 until frames step window) {
             val end = min(start + window, frames)
             var sum = 0.0
@@ -614,7 +614,7 @@ object AudioOps {
     ): FloatArray {
         val ch = 2
         val frames = pcm.size / ch
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         val dt = 1.0 / sampleRate
         val rc = 1.0 / (2 * Math.PI * cutoffHz)
         val alpha = dt / (rc + dt)
@@ -654,7 +654,7 @@ object AudioOps {
         val frames = pcm.size / ch
         if (frames == 0) return pcm
 
-        val out = pcm.clone()
+        val out = pcm.copyOf()
         val threshold = 10.0.pow(thresholdDb / 20.0).toFloat()
         val makeup = 10.0.pow(makeupDb / 20.0).toFloat()
         val attack = exp(-1.0 / (sampleRate * attackMs / 1000.0)).toFloat()
