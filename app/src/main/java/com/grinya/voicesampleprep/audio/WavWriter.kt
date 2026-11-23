@@ -20,7 +20,8 @@ object WavWriter {
     fun write(
         f: File, pcm: FloatArray, srcRate: Int, dstRate: Int, bits: Int,
         isStereoMono: Boolean, isTrueMono: Boolean, normalize: Boolean, fade: Boolean,
-        trimSilence: Boolean, denoise: Boolean
+        trimSilence: Boolean, denoise: Boolean,
+        fadeMs: Int = 5, normalizeTarget: Float = 0.9f
     ) {
         var data = pcm
         var rate = srcRate
@@ -56,12 +57,12 @@ object WavWriter {
 
         // 4. Normalize
         if (normalize) {
-            data = AudioOps.normalizePeak(data, 0.9f)
+            data = AudioOps.normalizePeak(data, normalizeTarget) // <-- Используем параметр
         }
 
         // 5. Fade
         if (fade) {
-            val ff = rate * 5 / 1000
+            val ff = rate * fadeMs / 1000 // <-- Используем параметр
             data = AudioOps.fadeIn(data, ff, true, true)
             data = AudioOps.fadeOut(data, ff, true, true)
         }
@@ -127,11 +128,12 @@ object WavWriter {
     fun write(
         f: File, pcm: FloatArray, srcRate: Int, dstRate: Int, bits: Int,
         isStereoMono: Boolean, isTrueMono: Boolean, normalize: Boolean, fade: Boolean,
-        trimSilence: Boolean
+        trimSilence: Boolean,
+        fadeMs: Int = 5, normalizeTarget: Float = 0.9f
     ) {
         write(
             f, pcm, srcRate, dstRate, bits, isStereoMono, isTrueMono, normalize, fade,
-            trimSilence, false
+            trimSilence, false, fadeMs, normalizeTarget
         )
     }
 

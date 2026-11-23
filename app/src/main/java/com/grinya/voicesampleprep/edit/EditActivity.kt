@@ -517,9 +517,12 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
     private fun showNormalizeDialog() {
         val c = clip ?: return
         val w = wave ?: return
+        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+        val defaultTarget = prefs.getFloat(SettingsActivity.KEY_NORMALIZE_TARGET, 0.9f)
+
         val input = EditText(this)
         input.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-        input.setText("0.9")
+        input.setText(defaultTarget.toString())
         val useSel = w.hasSelection()
         val title = getString(R.string.normalize_dialog_title) +
         if (useSel) " (к выделению)" else " (весь файл)"
@@ -541,9 +544,12 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
     private fun showFadeDialog(fadeIn: Boolean) {
         val c = clip ?: return
         val w = wave ?: return
+        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+        val defaultMs = prefs.getInt(SettingsActivity.KEY_FADE_MS, 5)
+
         val input = EditText(this)
         input.inputType = InputType.TYPE_CLASS_NUMBER
-        input.setText("20")
+        input.setText(defaultMs.toString())
         val useSel = w.hasSelection()
         val title = getString(R.string.fade_dialog_title) +
         if (useSel) " (к выделению)" else " (весь файл)"
@@ -568,9 +574,12 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
     private fun showAutoTrimDialog() {
         val c = clip ?: return
         val w = wave ?: return
+        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+        val defaultThreshold = prefs.getFloat(SettingsActivity.KEY_AUTO_TRIM_THRESHOLD, 0.001f)
+
         val input = EditText(this)
         input.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-        input.setText("0.001")
+        input.setText(defaultThreshold.toString())
         input.hint = "Порог амплитуды (0..1)"
 
         AlertDialog.Builder(this).setTitle("Auto-Trim (порог тишины)")

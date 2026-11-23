@@ -53,6 +53,90 @@
         android:textColor="@color/onSurface"
         android:text="Прилипание к нулю (Zero-crossing)" />
 
+    <!-- Настройки обработки -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Параметры обработки"
+        android:textColor="@color/accent"
+        android:textSize="14sp" />
+
+    <!-- Порог Auto-Trim -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Порог тишины (Auto-Trim)"
+            android:textColor="@color/onSurface" />
+
+        <EditText
+            android:id="@+id/etAutoTrimThreshold"
+            android:layout_width="80dp"
+            android:layout_height="wrap_content"
+            android:inputType="numberDecimal"
+            android:text="0.001"
+            android:textColor="@color/onSurface"
+            android:backgroundTint="@color/accent" />
+    </LinearLayout>
+
+    <!-- Длительность Fade -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Fade (мс)"
+            android:textColor="@color/onSurface" />
+
+        <EditText
+            android:id="@+id/etFadeMs"
+            android:layout_width="80dp"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:text="5"
+            android:textColor="@color/onSurface"
+            android:backgroundTint="@color/accent" />
+    </LinearLayout>
+
+    <!-- Целевой пик Normalize -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Целевой пик Normalize (0..1)"
+            android:textColor="@color/onSurface" />
+
+        <EditText
+            android:id="@+id/etNormalizeTarget"
+            android:layout_width="80dp"
+            android:layout_height="wrap_content"
+            android:inputType="numberDecimal"
+            android:text="0.9"
+            android:textColor="@color/onSurface"
+            android:backgroundTint="@color/accent" />
+    </LinearLayout>
+
     <Button
         android:id="@+id/btnAbout"
         android:layout_width="match_parent"

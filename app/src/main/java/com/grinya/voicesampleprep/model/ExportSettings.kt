@@ -12,4 +12,8 @@ class ExportSettings {
     @JvmField var trimSilence = false
     @JvmField var denoise = false
     @JvmField var nameTemplate: String? = null
+    
+    // --- Новые поля для настроек ---
+    @JvmField var fadeMs: Int = 5
+    @JvmField var normalizeTarget: Float = 0.9f
 }

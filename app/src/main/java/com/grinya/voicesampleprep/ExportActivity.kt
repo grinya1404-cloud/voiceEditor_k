@@ -291,13 +291,17 @@ class ExportActivity : AppCompatActivity() {
         s.fade = findViewById<CheckBox>(R.id.cbFade).isChecked
         s.trimSilence = findViewById<CheckBox>(R.id.cbTrimSilence).isChecked
 
-        // D2: один findViewById
         val cbDenoise = findViewById<CheckBox>(R.id.cbDenoise)
         s.denoise = cbDenoise?.isChecked == true
 
         val raw = findViewById<EditText>(R.id.edName).text.toString().trim()
         s.nameTemplate = if (raw.isEmpty()) "{name}_{index}" else raw
-        s.onlySelection = false
+
+        // --- Новые настройки ---
+        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+        s.fadeMs = prefs.getInt(SettingsActivity.KEY_FADE_MS, 5)
+        s.normalizeTarget = prefs.getFloat(SettingsActivity.KEY_NORMALIZE_TARGET, 0.9f)
+
         return s
     }
 
@@ -323,11 +327,12 @@ class ExportActivity : AppCompatActivity() {
 
         val fileUri = createFile(treeUri, fileName) ?: return null
 
-        // D4: уникальный tmp + гарантированное удаление
         val tmp = File.createTempFile("exp_", ".wav", cacheDir)
         try {
+            // --- Передаем fadeMs и normalizeTarget ---
             WavWriter.write(tmp, rangePcm, clip.sampleRate, s.rate, s.bits, s.stereoMono,
-                s.trueMono, s.normalize, s.fade, s.trimSilence, s.denoise)
+                s.trueMono, s.normalize, s.fade, s.trimSilence, s.denoise,
+                s.fadeMs, s.normalizeTarget)
 
             if (tmp.length() == 0L) {
                 android.util.Log.w("EXPORT", "Пустой WAV для $fileName")

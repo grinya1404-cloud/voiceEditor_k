@@ -9,13 +9,15 @@ import java.io.File
 import java.io.FileFilter
 import java.io.FilenameFilter
 import java.io.IOException
+import com.grinya.voicesampleprep.SettingsActivity
 
 class BankManager(c: Context) {
 
     val banksRoot: File
+    private val appContext: Context = c.applicationContext // <-- Сохраняем контекст
 
     init {
-        val external = c.applicationContext.getExternalFilesDir(null)
+        val external = appContext.getExternalFilesDir(null)
         banksRoot = File(external, "banks")
         if (!banksRoot.exists()) banksRoot.mkdirs()
     }
@@ -91,7 +93,13 @@ class BankManager(c: Context) {
             f = File(bank.dir, "${safe}_$counter.wav")
             counter++
         }
-        WavWriter.write(f, clip.pcm, clip.sampleRate, clip.sampleRate, 16, false, false, false, false, false)
+
+        // --- Читаем настройки ---
+        val prefs = appContext.getSharedPreferences(SettingsActivity.PREFS, Context.MODE_PRIVATE)
+        val fadeMs = prefs.getInt(SettingsActivity.KEY_FADE_MS, 5)
+        val normalizeTarget = prefs.getFloat(SettingsActivity.KEY_NORMALIZE_TARGET, 0.9f)
+
+        WavWriter.write(f, clip.pcm, clip.sampleRate, clip.sampleRate, 16, false, false, false, false, false, fadeMs, normalizeTarget)
         return f
     }
 
