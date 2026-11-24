@@ -9,12 +9,6 @@ import java.io.IOException
 
 object WavWriter {
 
-    /**
-     * @param pcm     interleaved stereo (L,R,L,R...)
-     * @param srcRate sample rate исходного pcm
-     * @param dstRate sample rate для файла (если != srcRate — пересэмплируем)
-     * @param bits    16 или 24
-     */
     @JvmStatic
     @Throws(IOException::class)
     fun write(
@@ -26,18 +20,15 @@ object WavWriter {
         var data = pcm
         var rate = srcRate
 
-        // 1. Ресемплинг
         if (dstRate != srcRate) {
             data = AudioOps.resample(data, srcRate, dstRate)
             rate = dstRate
         }
 
-        // 2. Denoise
         if (denoise) {
             data = Denoiser.denoiseStereo(data)
         }
 
-        // 2.5 Сведение каналов
         if (isTrueMono) {
             data = AudioOps.toMonoSmart(data)
         } else if (isStereoMono) {
@@ -49,20 +40,17 @@ object WavWriter {
             }
         }
 
-        // 3. Trim Silence
         if (trimSilence) {
             val ch = if (isTrueMono) 1 else 2
             data = AudioOps.trimSilence(data, 0.003f, ch)
         }
 
-        // 4. Normalize
         if (normalize) {
-            data = AudioOps.normalizePeak(data, normalizeTarget) // <-- Используем параметр
+            data = AudioOps.normalizePeak(data, normalizeTarget)
         }
 
-        // 5. Fade
         if (fade) {
-            val ff = rate * fadeMs / 1000 // <-- Используем параметр
+            val ff = rate * fadeMs / 1000
             data = AudioOps.fadeIn(data, ff, true, true)
             data = AudioOps.fadeOut(data, ff, true, true)
         }

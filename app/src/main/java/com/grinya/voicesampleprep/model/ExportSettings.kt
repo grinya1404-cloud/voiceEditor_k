@@ -13,7 +13,7 @@ class ExportSettings {
     @JvmField var denoise = false
     @JvmField var nameTemplate: String? = null
     
-    // --- Новые поля для настроек ---
+    // --- Новые поля ---
     @JvmField var fadeMs: Int = 5
     @JvmField var normalizeTarget: Float = 0.9f
 }

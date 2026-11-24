@@ -11,6 +11,7 @@ import com.grinya.voicesampleprep.model.AudioMeta
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
+import com.grinya.voicesampleprep.util.TimeFormat
 
 object AudioInfoDialog {
 
@@ -60,9 +61,9 @@ object AudioInfoDialog {
         val durationMs = endMs - startMs
 
         sb.append("=== ИНТЕРВАЛ ===\n")
-        sb.append("Начало: ").append(formatMs(startMs)).append("\n")
-        sb.append("Конец: ").append(formatMs(endMs)).append("\n")
-        sb.append("Длительность: ").append(formatMs(durationMs)).append("\n")
+        sb.append("Начало: ").append(TimeFormat.formatMs(startMs)).append("\n")
+        sb.append("Конец: ").append(TimeFormat.formatMs(endMs)).append("\n")
+        sb.append("Длительность: ").append(TimeFormat.formatMs(durationMs)).append("\n")
         sb.append("Метки: ")
             .append(if (startMarkerNum > 0) startMarkerNum.toString() else "—")
             .append(" → ")
@@ -207,10 +208,4 @@ object AudioInfoDialog {
         return sb.toString()
     }
 
-    private fun formatMs(ms: Int): String {
-        val m = ms / 60000
-        val s = (ms % 60000) / 1000
-        val r = ms % 1000
-        return String.format(Locale.US, "%02d:%02d.%03d", m, s, r)
-    }
 }

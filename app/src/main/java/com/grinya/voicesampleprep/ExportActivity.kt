@@ -76,6 +76,30 @@ class ExportActivity : AppCompatActivity() {
         }
     }
 
+    private fun readSettings(): ExportSettings {
+        val s = ExportSettings()
+        s.byMarkers = findViewById<RadioButton>(R.id.rbByMarkers).isChecked
+        s.bits = if (findViewById<RadioButton>(R.id.rb24).isChecked) 24 else 16
+        s.rate = if (findViewById<RadioButton>(R.id.rb441).isChecked) 44100 else 48000
+        s.stereoMono = findViewById<RadioButton>(R.id.rbStereoMono).isChecked
+        s.trueMono = findViewById<RadioButton>(R.id.rbTrueMono).isChecked
+        s.normalize = findViewById<CheckBox>(R.id.cbNormalize).isChecked
+        s.fade = findViewById<CheckBox>(R.id.cbFade).isChecked
+        s.trimSilence = findViewById<CheckBox>(R.id.cbTrimSilence).isChecked
+
+        val cbDenoise = findViewById<CheckBox>(R.id.cbDenoise)
+        s.denoise = cbDenoise?.isChecked == true
+
+        val raw = findViewById<EditText>(R.id.edName).text.toString().trim()
+        s.nameTemplate = if (raw.isEmpty()) "{name}_{index}" else raw
+
+        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+        s.fadeMs = prefs.getInt(SettingsActivity.KEY_FADE_MS, 5)
+        s.normalizeTarget = prefs.getFloat(SettingsActivity.KEY_NORMALIZE_TARGET, 0.9f)
+
+        return s
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -149,10 +173,19 @@ class ExportActivity : AppCompatActivity() {
                 rbByMarkers.isEnabled = false
                 rbByMarkers.text = "По маркерам (нужно ≥ 2)"
             }
+
         } else {
             originalMeta = AudioMeta()
             findViewById<RadioButton>(R.id.rbSingle).text = "Один файл (весь клип)"
         }
+
+        // --- Обновляем текст чекбоксов с учетом настроек ---
+        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+        val fadeMs = prefs.getInt(SettingsActivity.KEY_FADE_MS, 5)
+        val normalizeTarget = prefs.getFloat(SettingsActivity.KEY_NORMALIZE_TARGET, 0.9f)
+
+        findViewById<CheckBox>(R.id.cbNormalize).text = "Нормализовать (пик $normalizeTarget)"
+        findViewById<CheckBox>(R.id.cbFade).text = "Fade $fadeMs мс по краям (анти-щелчок)"
 
         findViewById<View>(R.id.btnExport).setOnClickListener { startExport() }
         findViewById<View>(R.id.btnCancel).setOnClickListener { finish() }
@@ -280,31 +313,6 @@ class ExportActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun readSettings(): ExportSettings {
-        val s = ExportSettings()
-        s.byMarkers = findViewById<RadioButton>(R.id.rbByMarkers).isChecked
-        s.bits = if (findViewById<RadioButton>(R.id.rb24).isChecked) 24 else 16
-        s.rate = if (findViewById<RadioButton>(R.id.rb441).isChecked) 44100 else 48000
-        s.stereoMono = findViewById<RadioButton>(R.id.rbStereoMono).isChecked
-        s.trueMono = findViewById<RadioButton>(R.id.rbTrueMono).isChecked
-        s.normalize = findViewById<CheckBox>(R.id.cbNormalize).isChecked
-        s.fade = findViewById<CheckBox>(R.id.cbFade).isChecked
-        s.trimSilence = findViewById<CheckBox>(R.id.cbTrimSilence).isChecked
-
-        val cbDenoise = findViewById<CheckBox>(R.id.cbDenoise)
-        s.denoise = cbDenoise?.isChecked == true
-
-        val raw = findViewById<EditText>(R.id.edName).text.toString().trim()
-        s.nameTemplate = if (raw.isEmpty()) "{name}_{index}" else raw
-
-        // --- Новые настройки ---
-        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
-        s.fadeMs = prefs.getInt(SettingsActivity.KEY_FADE_MS, 5)
-        s.normalizeTarget = prefs.getFloat(SettingsActivity.KEY_NORMALIZE_TARGET, 0.9f)
-
-        return s
-    }
-
     private fun buildRanges(byMarkers: Boolean): List<IntArray> {
         return ExportUtils.buildRanges(source!!, byMarkers, selStart, selEnd)
     }
@@ -333,7 +341,6 @@ class ExportActivity : AppCompatActivity() {
             WavWriter.write(tmp, rangePcm, clip.sampleRate, s.rate, s.bits, s.stereoMono,
                 s.trueMono, s.normalize, s.fade, s.trimSilence, s.denoise,
                 s.fadeMs, s.normalizeTarget)
-
             if (tmp.length() == 0L) {
                 android.util.Log.w("EXPORT", "Пустой WAV для $fileName")
                 deleteCreated(fileUri)

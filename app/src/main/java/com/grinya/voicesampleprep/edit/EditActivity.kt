@@ -10,6 +10,7 @@ import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
@@ -23,8 +24,8 @@ import com.grinya.voicesampleprep.model.AudioClip
 import com.grinya.voicesampleprep.util.AudioInfoDialog
 import com.grinya.voicesampleprep.util.AudioOps
 import com.grinya.voicesampleprep.util.Denoiser
+import com.grinya.voicesampleprep.util.TimeFormat
 import java.util.Locale
-import androidx.activity.result.contract.ActivityResultContracts
 
 class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Listener {
 
@@ -58,6 +59,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
     private var pendingStartMarker = -1
     private var forcedStartLocal = -1
     private var forcedEndLocal = -1
+
     private val insertLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -109,6 +111,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         wireTransport()
         wireTools()
         updateDynamicButtons()
+
         // Инициализация видимости кнопок перелистывания
         updateIntervalPagingButtons(false)
     }
@@ -121,6 +124,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                 c.undo()
                 refreshAfterChange()
                 wave?.updateExportIntervals(c.exportIntervals)
+                updateIntervalPagingButtons()
             }
         }
         findViewById<View>(R.id.btnRedo).setOnClickListener {
@@ -129,6 +133,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                 c.redo()
                 refreshAfterChange()
                 wave?.updateExportIntervals(c.exportIntervals)
+                updateIntervalPagingButtons()
             }
         }
 
@@ -303,9 +308,14 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         val start = if (w.hasSelection()) w.getSelStart() else 0
         val end = if (w.hasSelection()) w.getSelEnd() else c.frameCount()
         val range = AudioOps.trim(c.pcm, start, end)
+
+        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+        val threshold = prefs.getFloat(SettingsActivity.KEY_VAD_THRESHOLD, -40f)
+        val hold = prefs.getInt(SettingsActivity.KEY_VAD_HOLD, 100)
+
         Thread {
             try {
-                val out = AudioOps.vadGate(range, c.sampleRate, -40f, 100)
+                val out = AudioOps.vadGate(range, c.sampleRate, threshold, hold)
                 runOnUiThread {
                     c.replaceRangePcm(out, start, end)
                     refreshAfterChange()
@@ -326,9 +336,14 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         val start = if (w.hasSelection()) w.getSelStart() else 0
         val end = if (w.hasSelection()) w.getSelEnd() else c.frameCount()
         val range = AudioOps.trim(c.pcm, start, end)
+
+        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+        val threshold = prefs.getFloat(SettingsActivity.KEY_DEESSER_THRESHOLD, -30f)
+        val reduction = prefs.getFloat(SettingsActivity.KEY_DEESSER_REDUCTION, 6f)
+
         Thread {
             try {
-                val out = AudioOps.deEss(range, c.sampleRate, -30f, 6f)
+                val out = AudioOps.deEss(range, c.sampleRate, threshold, reduction)
                 runOnUiThread {
                     c.replaceRangePcm(out, start, end)
                     refreshAfterChange()
@@ -349,9 +364,17 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         val start = if (w.hasSelection()) w.getSelStart() else 0
         val end = if (w.hasSelection()) w.getSelEnd() else c.frameCount()
         val range = AudioOps.trim(c.pcm, start, end)
+
+        val prefs = getSharedPreferences(SettingsActivity.PREFS, MODE_PRIVATE)
+        val threshold = prefs.getFloat(SettingsActivity.KEY_COMP_THRESHOLD, -18f)
+        val ratio = prefs.getFloat(SettingsActivity.KEY_COMP_RATIO, 3f)
+        val attack = prefs.getFloat(SettingsActivity.KEY_COMP_ATTACK, 10f)
+        val release = prefs.getFloat(SettingsActivity.KEY_COMP_RELEASE, 100f)
+        val makeup = prefs.getFloat(SettingsActivity.KEY_COMP_MAKEUP, 2f)
+
         Thread {
             try {
-                val out = AudioOps.compress(range, c.sampleRate, -18f, 3f, 10f, 100f, 2f)
+                val out = AudioOps.compress(range, c.sampleRate, threshold, ratio, attack, release, makeup)
                 runOnUiThread {
                     c.replaceRangePcm(out, start, end)
                     refreshAfterChange()
@@ -359,13 +382,11 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                 }
             } catch (e: Throwable) {
                 runOnUiThread {
-                    Toast.makeText(this, "Ошибка компрессора: ${e.message}", Toast.LENGTH_LONG)
-                    .show()
+                    Toast.makeText(this, "Ошибка компрессора: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
         }.start()
     }
-
     private fun wireTransport() {
         val p = player ?: return
         val w = wave ?: return
@@ -494,6 +515,20 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         // B13: кнопки перелистывания интервалов
         findViewById<View>(R.id.btnIntervalUp).setOnClickListener { w.nextIntervalPage() }
         findViewById<View>(R.id.btnIntervalDown).setOnClickListener { w.prevIntervalPage() }
+    }
+
+    private fun updateIntervalPagingButtons(forceMode: Boolean? = null) {
+        val w = wave ?: return
+        val isMode = forceMode ?: w.isIntervalsEditMode()
+        val count = w.getIntervalCount()
+        val pageSize = w.getIntervalPageSize()
+
+        // Показываем кнопки только в режиме интервалов И если их больше одной страницы
+        val show = isMode && count > pageSize
+        val vis = if (show) View.VISIBLE else View.GONE
+
+        findViewById<View>(R.id.btnIntervalUp).visibility = vis
+        findViewById<View>(R.id.btnIntervalDown).visibility = vis
     }
     private fun showGainDialog() {
         val c = clip ?: return
@@ -630,7 +665,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
             Toast.makeText(this, "Маркеров нет", Toast.LENGTH_SHORT).show()
             return
         }
-        val items = c.markers.map { formatMs(it * 1000 / c.sampleRate) }
+        val items = c.markers.map { TimeFormat.formatMs(it * 1000 / c.sampleRate) }
         AlertDialog.Builder(this).setTitle("Маркеры (${c.markers.size})")
         .setItems(items.toTypedArray()) { _, which ->
             val frame = c.markers[which]
@@ -642,8 +677,8 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
             c.clearExportIntervals()
             w.updateMarkers(c.markers)
             w.updateExportIntervals(c.exportIntervals)
-            w.setIntervalsEditMode(false) // <-- Выходим из режима
-            updateIntervalPagingButtons(false) // <-- Обновляем кнопки
+            w.setIntervalsEditMode(false)
+            updateIntervalPagingButtons(false)
             isChanged = true
         }.setNeutralButton("Закрыть", null).show()
     }
@@ -681,14 +716,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         val p = player ?: return
         val curMs = p.getCurrentFrame() * 1000 / c.sampleRate
         val totalMs = c.frameCount() * 1000 / c.sampleRate
-        txtTime.text = "${formatMs(curMs)} / ${formatMs(totalMs)}"
-    }
-
-    private fun formatMs(ms: Int): String {
-        val m = ms / 60000
-        val s = (ms % 60000) / 1000
-        val r = ms % 1000
-        return String.format(Locale.US, "%02d:%02d.%03d", m, s, r)
+        txtTime.text = "${TimeFormat.formatMs(curMs)} / ${TimeFormat.formatMs(totalMs)}"
     }
 
     private fun applyL(): Boolean = !isStereoMode || isLeftEnabled
@@ -749,7 +777,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         val c = clip ?: return
         if (c.moveMarker(oldFrame, newFrame)) {
             refreshAfterChange()
-            updateIntervalPagingButtons() // <-- Обновляем кнопки
+            updateIntervalPagingButtons()
             Toast.makeText(this, "Маркер перемещён", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "Не удалось переместить (занято?)", Toast.LENGTH_SHORT).show()
@@ -776,7 +804,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
             } else if (c.addExportInterval(start, end)) {
                 Toast.makeText(this, "Интервал создан", Toast.LENGTH_SHORT).show()
                 w.updateExportIntervals(c.exportIntervals)
-                updateIntervalPagingButtons() // <-- Обновляем кнопки
+                updateIntervalPagingButtons()
                 isChanged = true
             } else {
                 Toast.makeText(this, "Не удалось создать интервал", Toast.LENGTH_SHORT).show()
@@ -785,7 +813,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
             return
         }
 
-        val time = formatMs(frame * 1000 / c.sampleRate)
+        val time = TimeFormat.formatMs(frame * 1000 / c.sampleRate)
         val hasInterval = c.exportIntervals.any { it[0] == frame || it[1] == frame }
 
         val options = ArrayList<String>()
@@ -809,7 +837,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                 "Отменить соединение" -> {
                     c.removeExportIntervalsWithMarker(frame)
                     w.updateExportIntervals(c.exportIntervals)
-                    updateIntervalPagingButtons() // <-- Обновляем кнопки
+                    updateIntervalPagingButtons()
                     isChanged = true
                     Toast.makeText(this, "Соединение отменено", Toast.LENGTH_SHORT).show()
                 }
@@ -818,7 +846,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                     c.removeMarker(frame)
                     w.updateMarkers(c.markers)
                     w.updateExportIntervals(c.exportIntervals)
-                    updateIntervalPagingButtons() // <-- Обновляем кнопки
+                    updateIntervalPagingButtons()
                     isChanged = true
                 }
             }
@@ -838,8 +866,8 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
     override fun onIntervalLongPressed(startFrame: Int, endFrame: Int) {
         val c = clip ?: return
         val w = wave ?: return
-        val timeStart = formatMs(startFrame * 1000 / c.sampleRate)
-        val timeEnd = formatMs(endFrame * 1000 / c.sampleRate)
+        val timeStart = TimeFormat.formatMs(startFrame * 1000 / c.sampleRate)
+        val timeEnd = TimeFormat.formatMs(endFrame * 1000 / c.sampleRate)
 
         AlertDialog.Builder(this).setTitle("Интервал $timeStart – $timeEnd")
         .setItems(arrayOf("Проиграть", "Удалить", "Экспортировать", "В банк", "Инфо"))
@@ -854,9 +882,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
                     c.removeExportInterval(startFrame, endFrame)
                     w.updateExportIntervals(c.exportIntervals)
                     isChanged = true
-                    updateIntervalPagingButtons() // <-- Обновляем кнопки
-
-                    // Если интервалов не осталось — выходим из режима
+                    updateIntervalPagingButtons()
                     if (c.exportIntervals.isEmpty()) {
                         w.setIntervalsEditMode(false)
                         updateIntervalPagingButtons(false)
@@ -881,20 +907,6 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
         updateIntervalPagingButtons(enabled)
     }
 
-    private fun updateIntervalPagingButtons(forceMode: Boolean? = null) {
-        val w = wave ?: return
-        val isMode = forceMode ?: w.isIntervalsEditMode()
-        val count = w.getIntervalCount()
-        val pageSize = w.getIntervalPageSize()
-
-        // Показываем кнопки только в режиме интервалов И если их больше одной страницы
-        val show = isMode && count > pageSize
-        val vis = if (show) View.VISIBLE else View.GONE
-
-        findViewById<View>(R.id.btnIntervalUp).visibility = vis
-        findViewById<View>(R.id.btnIntervalDown).visibility = vis
-    }
-
     override fun onIntervalTapped(startFrame: Int, endFrame: Int) {
         val w = wave ?: return
         if (!w.isIntervalsEditMode()) w.setIntervalsEditMode(true)
@@ -915,6 +927,7 @@ class EditActivity : AppCompatActivity(), AudioPlayer.Listener, WaveformView.Lis
             EditActivityHolder.clear()
         }
     }
+
     private fun handleInsertResult(uri: Uri?) {
         uri ?: return
         Thread {

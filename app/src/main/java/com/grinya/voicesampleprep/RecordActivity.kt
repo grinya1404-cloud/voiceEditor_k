@@ -20,6 +20,7 @@ import com.grinya.voicesampleprep.model.AudioMeta
 import com.grinya.voicesampleprep.model.Bank
 import com.grinya.voicesampleprep.model.BankManager
 import java.util.Locale
+import com.grinya.voicesampleprep.util.TimeFormat
 
 class RecordActivity : AppCompatActivity(), Recorder.Listener {
 
@@ -43,7 +44,7 @@ class RecordActivity : AppCompatActivity(), Recorder.Listener {
             val r = recorder
             if (r != null && r.isRecording()) {
                 val elapsed = System.currentTimeMillis() - recStartTime
-                txtTime.text = formatMs(elapsed.toInt())
+                txtTime.text = TimeFormat.formatMs(elapsed.toInt())
                 timer.postDelayed(this, 50)
             }
         }
@@ -149,7 +150,7 @@ class RecordActivity : AppCompatActivity(), Recorder.Listener {
 
     override fun onFinished(pcm: FloatArray, elapsedMs: Int) {
         recordedPcm = pcm
-        txtTime.text = formatMs(elapsedMs)
+        txtTime.text = TimeFormat.formatMs(elapsedMs)
         levelBar.progress = 0
         btnDone.visibility = View.VISIBLE
     }
@@ -166,10 +167,4 @@ class RecordActivity : AppCompatActivity(), Recorder.Listener {
         timer.removeCallbacks(timerTick)
     }
 
-    private fun formatMs(ms: Int): String {
-        val m = ms / 60000
-        val s = (ms % 60000) / 1000
-        val r = ms % 1000
-        return String.format(Locale.US, "%02d:%02d.%03d", m, s, r)
-    }
 }

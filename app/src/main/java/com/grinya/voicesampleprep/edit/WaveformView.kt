@@ -10,6 +10,9 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import androidx.core.content.ContextCompat
+import com.grinya.voicesampleprep.R
+import com.grinya.voicesampleprep.util.TimeFormat
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -36,20 +39,6 @@ class WaveformView @JvmOverloads constructor(
         fun onIntervalsModeChanged(enabled: Boolean)
         fun onIntervalTapped(startFrame: Int, endFrame: Int)
     }
-
-    // ---------- цвета ----------
-    private val colorBg = 0xFF0E0E10.toInt()
-    private val colorWave = 0xFF9AA0A6.toInt()
-    private val colorCenterLine = 0xFF2A2A2E.toInt()
-    private val colorPlayhead = 0xFFFF3B30.toInt()
-    private val colorActivePlayhead = 0xFF4CAF50.toInt()
-    private val colorSelection = 0x33FFB300
-    private val colorSelectionBorder = 0xFFFFB300.toInt()
-    private val colorMarker = 0xFF4FC3F7.toInt()
-    private val colorGrid = 0xFF1F1F22.toInt()
-    private val colorRuler = 0xFF2A2A2E.toInt()
-    private val colorRulerText = 0xFF808080.toInt()
-    private val colorCheck = 0xFFFFB300.toInt()
 
     // ---------- поля ----------
     private var pcm: FloatArray? = null
@@ -92,7 +81,7 @@ class WaveformView @JvmOverloads constructor(
     private var intervalPage = 0
     private var intervalPageSize = 6
     private var selectedIntervalIndex = -1
-    private var justEnteredIntervalsMode = false
+    private var justEnteredIntervalsMode = false // Флаг для первого тапа
     private var lastWaveTop = 0
     private var lastWaveBottom = 0
     private var lastWaveWidth = 0
@@ -206,6 +195,20 @@ class WaveformView @JvmOverloads constructor(
         markerFlagH = (MARKER_FLAG_H_DP * density).toInt()
         checkSize = (32 * density).toInt()
         paddingPx = (25 * density).toInt()
+
+        // Загрузка цветов из ресурсов
+        val colorBg = ContextCompat.getColor(c, R.color.wave_bg)
+        val colorWave = ContextCompat.getColor(c, R.color.wave_line)
+        val colorCenterLine = ContextCompat.getColor(c, R.color.wave_center_line)
+        val colorPlayhead = ContextCompat.getColor(c, R.color.wave_playhead)
+        val colorActivePlayhead = ContextCompat.getColor(c, R.color.wave_active_playhead)
+        val colorSelection = ContextCompat.getColor(c, R.color.wave_selection)
+        val colorSelectionBorder = ContextCompat.getColor(c, R.color.wave_selection_border)
+        val colorMarker = ContextCompat.getColor(c, R.color.wave_marker)
+        val colorGrid = ContextCompat.getColor(c, R.color.wave_grid)
+        val colorRuler = ContextCompat.getColor(c, R.color.wave_ruler)
+        val colorRulerText = ContextCompat.getColor(c, R.color.wave_ruler_text)
+        val colorCheck = ContextCompat.getColor(c, R.color.wave_check)
 
         pWave.color = colorWave
         pWave.strokeWidth = 1.5f
@@ -333,12 +336,10 @@ class WaveformView @JvmOverloads constructor(
                 }
         })
     }
-
     fun setListener(l: Listener?) {
         listener = l
     }
 
-    // ... (продолжение — API, touch, draw — в следующих частях)
     fun setStereoView(stereo: Boolean) {
         stereoView = stereo
         invalidatePeakCache()
@@ -490,13 +491,16 @@ class WaveformView @JvmOverloads constructor(
         intervalsEditMode = enabled
         intervalPage = 0
         selectedIntervalIndex = -1
-        justEnteredIntervalsMode = false // <-- Сброс флага
+        justEnteredIntervalsMode = false // Сброс флага при входе/выходе
         invalidate()
     }
 
     fun isIntervalsEditMode(): Boolean = intervalsEditMode
 
+    /** Возвращает количество интервалов. */
     fun getIntervalCount(): Int = exportIntervals?.size ?: 0
+
+    /** Возвращает размер страницы для перелистывания. */
     fun getIntervalPageSize(): Int = intervalPageSize
 
     fun nextIntervalPage() {
@@ -518,7 +522,6 @@ class WaveformView @JvmOverloads constructor(
     }
 
     fun isZeroCrossingSnap(): Boolean = zeroCrossingSnap
-
     override fun onTouchEvent(e: MotionEvent): Boolean {
         scaleDetector?.onTouchEvent(e)
         gestureDetector?.onTouchEvent(e)
@@ -587,7 +590,7 @@ class WaveformView @JvmOverloads constructor(
                     if (e.x >= drawX1 && e.x <= drawX2 && e.y >= tapTop && e.y <= tapBottom) {
                         if (!intervalsEditMode) {
                             setIntervalsEditMode(true)
-                            justEnteredIntervalsMode = true // <-- Флаг, что мы только что вошли
+                            justEnteredIntervalsMode = true // <-- Флаг, что только что вошли
                             listener?.onIntervalsModeChanged(true)
                         } else {
                             selectedIntervalIndex = i
@@ -794,10 +797,10 @@ class WaveformView @JvmOverloads constructor(
             listener?.onSelectionChanged(selStart, selEnd)
         }
 
-        // Выход из режима интервалов (только если это НЕ первый тап)
+        // Выход из режима интервалов
         if (intervalsEditMode && selectedIntervalIndex != -1 && !longPressActivated) {
             if (justEnteredIntervalsMode) {
-                justEnteredIntervalsMode = false
+                justEnteredIntervalsMode = false // Пропускаем первый тап
             } else {
                 if (abs(e.x - downX) < 8 && abs(e.y - downY) < 8) {
                     val layout = calcStripLayout()
@@ -966,7 +969,7 @@ class WaveformView @JvmOverloads constructor(
     private fun nearestZeroCross(frame: Int): Int {
         val p = pcm
         if (p == null || totalFrames == 0) return frame
-        var f = max(0, min(totalFrames - 1, frame))
+        val f = max(0, min(totalFrames - 1, frame))
         val search = min(2048, totalFrames / 2)
         var best = f
         var bestDist = Int.MAX_VALUE
@@ -1332,7 +1335,6 @@ class WaveformView @JvmOverloads constructor(
         canvas.drawLine(x, cyTop, x, cyBot, pSelBorder)
     }
 
-    /** B9: без labels. */
     private fun drawHorizontalLevels(canvas: Canvas, centerY: Int, halfH: Float, top: Int,
         bottom: Int, x0: Int, x1: Int) {
         val levels = floatArrayOf(0f, 0.5f, 0.7f, 0.9f, 0.999f)
@@ -1391,7 +1393,7 @@ class WaveformView @JvmOverloads constructor(
         }
     }
     private fun drawIntervalsEditMode(canvas: Canvas, waveWidth: Int, waveTop: Int,
-        waveBottom: Int) {
+                                      waveBottom: Int) {
         val ei = exportIntervals
         if (ei == null || ei.isEmpty()) return
 
@@ -1427,19 +1429,12 @@ class WaveformView @JvmOverloads constructor(
                 canvas.drawRoundRect(tmpRect, 6f, 6f, pIntervalFill)
             }
 
-            val label = "${i + 1}: ${formatMsForStrip(interval[0])} – " +
-            formatMsForStrip(interval[1])
+            val label = "${i + 1}: ${TimeFormat.formatMsShort(interval[0] * 1000 / sampleRate)} – " +
+                    TimeFormat.formatMsShort(interval[1] * 1000 / sampleRate)
             canvas.drawText(label, drawX1 + 8, offsetY + stripH / 2 + 4, pIntervalText)
 
             offsetY += stripH + 8f
         }
-    }
-
-    private fun formatMsForStrip(frame: Int): String {
-        val ms = frame * 1000 / sampleRate
-        val m = ms / 60000
-        val s = (ms % 60000) / 1000
-        return String.format(Locale.US, "%02d:%02d", m, s)
     }
 
     /** B5: раскладка полос интервалов без зависимости от onDraw. */
@@ -1458,7 +1453,7 @@ class WaveformView @JvmOverloads constructor(
         val stripH: Float
         if (intervalsEditMode) {
             stripH = min(40f, waveH.toFloat() / max(1, count + 1))
-            .coerceAtLeast(24f)
+                .coerceAtLeast(24f)
         } else {
             stripH = 8f
         }
