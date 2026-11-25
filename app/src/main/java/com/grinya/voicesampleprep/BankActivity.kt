@@ -27,6 +27,8 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
+import com.grinya.voicesampleprep.edit.MultitrackActivity
+import com.grinya.voicesampleprep.model.ProjectManager
 
 class BankActivity : AppCompatActivity() {
 
@@ -158,14 +160,14 @@ class BankActivity : AppCompatActivity() {
 
     /** E8: обновляет clip.dir/clip.name и EditActivityHolder. */
     /** E8: обновляет clip.dir/clip.name и EditActivityHolder. */
-private fun renameClip(clip: AudioClip) {
-    val input = EditText(this)
-    val nameOnly = if (clip.name.endsWith(".wav"))
+    private fun renameClip(clip: AudioClip) {
+        val input = EditText(this)
+        val nameOnly = if (clip.name.endsWith(".wav"))
         clip.name.substring(0, clip.name.length - 4) else clip.name
-    input.setText(nameOnly)
-    input.setSelection(input.text.length)
+        input.setText(nameOnly)
+        input.setSelection(input.text.length)
 
-    AlertDialog.Builder(this).setTitle("Новое имя").setView(input)
+        AlertDialog.Builder(this).setTitle("Новое имя").setView(input)
         .setPositiveButton("OK") { _, _ ->
             val newName = input.text.toString().trim()
             if (newName.isEmpty()) return@setPositiveButton
@@ -197,7 +199,7 @@ private fun renameClip(clip: AudioClip) {
                 Toast.makeText(this, "Ошибка переименования", Toast.LENGTH_SHORT).show()
             }
         }.setNegativeButton("Отмена", null).show()
-}
+    }
 
     private fun moveClip(clip: AudioClip) {
         showBankPicker("Переместить в банк") { targetBank ->
@@ -415,13 +417,16 @@ private fun renameClip(clip: AudioClip) {
             h.itemView.setOnLongClickListener {
                 AlertDialog.Builder(this@BankActivity).setTitle(c.name)
                 .setItems(arrayOf("Переименовать", "Переместить в банк",
-                        "Копировать в банк", "Инфо", "Удалить")) { _, which ->
+                        "Копировать в банк", "Инфо", "Удалить", "Открыть как проект",
+                "Преобразовать в проект")) { _, which ->
                     when (which) {
                         0 -> renameClip(c)
                         1 -> moveClip(c)
                         2 -> copyClip(c)
                         3 -> showClipInfo(c)
                         4 -> deleteClip(c)
+                        5 -> openAsProject(c) // Старый вариант (открывает папку как проект)
+                        6 -> convertToProject(c) // Новый вариант (создает папку)
                     }
                 }.show()
                 true
@@ -438,5 +443,29 @@ private fun renameClip(clip: AudioClip) {
 
     fun interface BankPickerCallback {
         fun onBankSelected(bank: Bank)
+    }
+    private fun openAsProject(clip: AudioClip) {
+        val dir = clip.dir?.parentFile
+        if (dir == null) {
+            Toast.makeText(this, "Ошибка: нет папки", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // Открываем MultitrackActivity, передавая путь к папке
+        val intent = Intent(this, MultitrackActivity::class.java)
+        intent.putExtra("projectDir", dir.absolutePath)
+        startActivity(intent)
+    }
+    private fun convertToProject(clip: AudioClip) {
+        val name = clip.name.substringBeforeLast('.')
+        android.util.Log.d("PROJECT", "Старт конвертации: $name, dir=${clip.dir}")
+        try {
+            val project = ProjectManager.createProjectFromClip(clip, name)
+            android.util.Log.d("PROJECT", "Успех: ${project.dir?.absolutePath}")
+            Toast.makeText(this, "Проект создан: ${project.name}", Toast.LENGTH_SHORT).show()
+            reload()
+        } catch (e: Exception) {
+            android.util.Log.e("PROJECT", "Ошибка", e)
+            Toast.makeText(this, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 }

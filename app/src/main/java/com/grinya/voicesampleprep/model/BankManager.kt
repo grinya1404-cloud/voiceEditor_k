@@ -1,6 +1,7 @@
 package com.grinya.voicesampleprep.model
 
 import android.content.Context
+import com.grinya.voicesampleprep.SettingsActivity
 import com.grinya.voicesampleprep.audio.AudioDecoder
 import com.grinya.voicesampleprep.audio.WavReader
 import com.grinya.voicesampleprep.audio.WavWriter
@@ -9,7 +10,6 @@ import java.io.File
 import java.io.FileFilter
 import java.io.FilenameFilter
 import java.io.IOException
-import com.grinya.voicesampleprep.SettingsActivity
 
 class BankManager(c: Context) {
 
@@ -27,11 +27,47 @@ class BankManager(c: Context) {
         val result = ArrayList<Bank>()
         val dirs = banksRoot.listFiles(FileFilter { it.isDirectory }) ?: return result
         dirs.sortWith { a, b -> a.name.compareTo(b.name, ignoreCase = true) }
+
         for (d in dirs) {
+            // Рекурсивно ищем проекты и обычные банки
+            scanDir(d, result)
+        }
+        return result
+    }
+
+    private fun scanDir(dir: File, result: MutableList<Bank>) {
+        // Проверяем: это проект?
+        if (File(dir, "project.json").exists()) {
             val b = Bank()
-            b.name = d.name
-            b.dir = d
-            val files = d.listFiles(FilenameFilter { _, n -> n.lowercase().endsWith(".wav") })
+            b.name = dir.name
+            b.dir = dir
+            b.isProject = true
+
+            val files = dir.listFiles(FilenameFilter { _, n -> n.lowercase().endsWith(".wav") })
+            if (files != null) {
+                files.sortWith { a, c -> a.name.compareTo(c.name, ignoreCase = true) }
+                for (f in files) {
+                    val meta = AudioMeta.load(f)
+                    val sr = if (meta.sampleRate > 0) meta.sampleRate else AudioClip.SAMPLE_RATE
+                    val clip = AudioClip(f.name, FloatArray(0), sr)
+                    clip.dir = f
+                    b.clips.add(clip)
+                }
+            }
+            result.add(b)
+            return // Это проект, дальше не идем
+        }
+
+        // Это обычный банк (или папка-контейнер)
+        // Если внутри есть WAV-файлы, значит это обычный банк
+        val hasWav = dir.listFiles(FilenameFilter { _, n -> n.lowercase().endsWith(".wav") })?.isNotEmpty() == true
+
+        if (hasWav) {
+            val b = Bank()
+            b.name = dir.name
+            b.dir = dir
+            b.isProject = false
+            val files = dir.listFiles(FilenameFilter { _, n -> n.lowercase().endsWith(".wav") })
             if (files != null) {
                 files.sortWith { a, c -> a.name.compareTo(c.name, ignoreCase = true) }
                 for (f in files) {
@@ -44,9 +80,16 @@ class BankManager(c: Context) {
             }
             result.add(b)
         }
-        return result
-    }
 
+        // Ищем подпапки (например, проекты внутри банка)
+        val subDirs = dir.listFiles(FileFilter { it.isDirectory })
+        if (subDirs != null) {
+            subDirs.sortWith { a, b -> a.name.compareTo(b.name, ignoreCase = true) }
+            for (sub in subDirs) {
+                scanDir(sub, result)
+            }
+        }
+    }
     /**
      * E2: если банк с таким именем уже есть — возвращаем его (не создаём дубль). Если имя пустое/невалидное — sanitize → "untitled".
      */

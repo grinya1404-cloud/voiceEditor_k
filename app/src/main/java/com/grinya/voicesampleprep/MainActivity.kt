@@ -129,8 +129,10 @@ class MainActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(h: VH, pos: Int) {
             val b = data[pos]
-            h.name.text = b.name
+            val prefix = if (b.isProject) "📁 [PROJECT] " else ""
+            h.name.text = prefix + b.name
             h.info.text = "${b.clips.size} клипов"
+
             h.itemView.setOnClickListener { openBank(b) }
             h.itemView.setOnLongClickListener {
                 AlertDialog.Builder(this@MainActivity).setTitle(b.name)
