@@ -64,8 +64,6 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
         findViewById<Button>(R.id.btnAddTrack).setOnClickListener { pickTrackToAdd() }
     }
 
-    
-
     private fun showTrackActions(track: ProjectTrack) {
         AlertDialog.Builder(this)
         .setTitle(track.displayName)
@@ -170,11 +168,19 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
 
     override fun onResume() {
         super.onResume()
-        // Если мы возвращаемся из EditActivity, перезагружаем проект, чтобы увидеть изменения
+        // Перезагружаем проект, чтобы увидеть изменения после редактирования
         if (project != null) {
-            reloadProject()
+            val dir = project?.dir ?: return
+            try {
+                val newProject = ProjectManager.loadProject(dir)
+                project = newProject
+                wave?.setProject(newProject)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Ошибка обновления: ${e.message}", Toast.LENGTH_LONG).show()
+            }
         }
     }
+
     override fun onTrackSelected(track: ProjectTrack) {
         activeTrack = track
         Toast.makeText(this, "Выбран: ${track.displayName}", Toast.LENGTH_SHORT).show()
@@ -184,4 +190,5 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
         activeTrack = track
         showTrackActions(track) // Показываем меню (Редактировать, Инфо, Удалить)
     }
+
 }

@@ -3,14 +3,12 @@ package com.grinya.voicesampleprep.edit
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.GestureDetector
 import android.view.View
 import com.grinya.voicesampleprep.model.AudioProject
-import com.grinya.voicesampleprep.model.AudioClip
 import com.grinya.voicesampleprep.model.ProjectTrack
 import kotlin.math.abs
 import kotlin.math.max
@@ -24,7 +22,7 @@ class MultitrackWaveformView @JvmOverloads constructor(
 
     interface Listener {
         fun onTrackSelected(track: ProjectTrack)
-        fun onTrackLongPressed(track: ProjectTrack) // <-- Новый метод
+        fun onTrackLongPressed(track: ProjectTrack)
     }
 
     private var listener: Listener? = null
@@ -33,23 +31,23 @@ class MultitrackWaveformView @JvmOverloads constructor(
         listener = l
     }
 
+    // --- Параметры ---
     private var project: AudioProject? = null
     private var activeTrack: ProjectTrack? = null
 
-    // Параметры просмотра
     private var viewStartFrame = 0.0
     private var viewFramesPerPixel = 1.0
     private var paddingPx = (8 * resources.displayMetrics.density).toInt()
     private var headerWidthPx = (80 * resources.displayMetrics.density).toInt()
 
-    // Жесты
+    // --- Жесты ---
     private var gestureDetector: GestureDetector? = null
     private var scaleDetector: ScaleGestureDetector? = null
     private var lastTouchX = 0f
+    private var lastTouchY = 0f
+    private var scrollY = 0f
 
-    // Краски
-    private val pBg = Paint().apply { color = 0xFF0E0E10.toInt() }
-    private val pTrackBg = Paint().apply { color = 0x33FFFFFF }
+    // --- Краски ---
     private val pHeaderBg = Paint().apply {
         color = 0xFF1A1A1E.toInt()
         style = Paint.Style.FILL
@@ -59,56 +57,55 @@ class MultitrackWaveformView @JvmOverloads constructor(
         textSize = 12f * resources.displayMetrics.density
         typeface = android.graphics.Typeface.DEFAULT_BOLD
     }
-    private val pWave = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFFFFB300.toInt()
-        style = Paint.Style.FILL
-    }
-    private val pWaveStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFFFFB300.toInt()
-        style = Paint.Style.STROKE
-        strokeWidth = 1f * resources.displayMetrics.density
-    }
     private val pActiveBorder = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFFFB300.toInt()
         style = Paint.Style.STROKE
         strokeWidth = 2f * resources.displayMetrics.density
+    }
+    private val pWave = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFB300.toInt()
+        strokeWidth = 1f * resources.displayMetrics.density
+        style = Paint.Style.STROKE
     }
     private val pGrid = Paint().apply {
         color = 0xFF1F1F22.toInt()
         strokeWidth = 1f
     }
 
+    // Кэш пиков для каждого трека
     private val trackPeaks = mutableMapOf<ProjectTrack, FloatArray>()
 
     init {
         setBackgroundColor(0xFF0E0E10.toInt())
-        scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-                override fun onScale(detector: ScaleGestureDetector): Boolean {
-                    if (project == null) return true
-                    val oldFpp = viewFramesPerPixel
-                    var newFpp = oldFpp / detector.scaleFactor
-                    val minFpp = 1.0 / 8.0
-                    val maxFpp = max(1, project?.totalFrames() ?: 1).toDouble()
-                    if (newFpp < minFpp) newFpp = minFpp
-                    if (newFpp > maxFpp) newFpp = maxFpp
 
-                    val fx = detector.focusX - headerWidthPx
-                    val focusFrame = viewStartFrame + fx * oldFpp
-                    viewStartFrame = focusFrame - fx * newFpp
-                    viewFramesPerPixel = newFpp
-                    clampView()
-                    invalidate()
-                    return true
-                }
+        scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                if (project == null) return true
+                val oldFpp = viewFramesPerPixel
+                var newFpp = oldFpp / detector.scaleFactor
+                val minFpp = 1.0 / 8.0
+                val maxFpp = max(1, project?.totalFrames() ?: 1).toDouble()
+                if (newFpp < minFpp) newFpp = minFpp
+                if (newFpp > maxFpp) newFpp = maxFpp
+
+                val fx = detector.focusX - headerWidthPx
+                val focusFrame = viewStartFrame + fx * oldFpp
+                viewStartFrame = focusFrame - fx * newFpp
+                viewFramesPerPixel = newFpp
+                clampView()
+                trackPeaks.clear() // Сброс кэша при зуме
+                invalidate()
+                return true
+            }
         })
+
         gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-                override fun onLongPress(e: MotionEvent) {
-                    val track = activeTrack
-                    if (track != null) {
-                        // Вызываем коллбэк долгого тапа (нужно добавить в Listener)
-                        listener?.onTrackLongPressed(track)
-                    }
+            override fun onLongPress(e: MotionEvent) {
+                val track = activeTrack
+                if (track != null) {
+                    listener?.onTrackLongPressed(track)
                 }
+            }
         })
     }
 
@@ -118,6 +115,7 @@ class MultitrackWaveformView @JvmOverloads constructor(
         trackPeaks.clear()
         viewStartFrame = 0.0
         viewFramesPerPixel = 1.0
+        scrollY = 0f
         invalidate()
     }
 
@@ -143,32 +141,31 @@ class MultitrackWaveformView @JvmOverloads constructor(
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         scaleDetector?.onTouchEvent(e)
-        gestureDetector?.onTouchEvent(e) // <-- Добавить эту строку
+        gestureDetector?.onTouchEvent(e)
         if (scaleDetector?.isInProgress == true) return true
 
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastTouchX = e.x
-                if (e.x < headerWidthPx) return true // Тап по заголовку
+                lastTouchY = e.y
+                if (e.x < headerWidthPx) return true
 
-                // Выбор активного трека
                 val p = project ?: return true
                 val lanes = p.laneCount()
-                val waveH = height
-                val laneHeight = waveH.toFloat() / lanes
+                val h = height
+                val laneHeight = h.toFloat() / lanes // Пока без скролла, делим поровну
                 val laneIndex = (e.y / laneHeight).toInt()
 
                 if (laneIndex in 0 until lanes) {
-                    // ВОТ ЭТОТ ЦИКЛ ДОЛЖЕН БЫТЬ:
                     for (track in p.tracks) {
                         if (track.laneIndex == laneIndex) {
-                            val trackStartX = headerWidthPx + ((track.startOffsetFrames - viewStartFrame) / viewFramesPerPixel).toInt()
+                            val trackStartX = headerWidthPx + paddingPx + ((track.startOffsetFrames - viewStartFrame) / viewFramesPerPixel).toFloat()
                             val trackEndX = trackStartX + track.clip.frameCount() / viewFramesPerPixel
 
                             if (e.x >= trackStartX && e.x <= trackEndX) {
                                 activeTrack = track
                                 invalidate()
-                                listener?.onTrackSelected(track) // Сообщаем Activity, что трек выбран
+                                listener?.onTrackSelected(track)
                                 break
                             }
                         }
@@ -201,11 +198,9 @@ class MultitrackWaveformView @JvmOverloads constructor(
 
         val lanes = p.laneCount()
         val laneHeight = h.toFloat() / lanes
-        val visibleWaveWidth = w - headerWidthPx - 2 * paddingPx
 
         // Заголовки
         canvas.drawRect(0f, 0f, headerWidthPx.toFloat(), h.toFloat(), pHeaderBg)
-
         for (track in p.tracks) {
             val laneTop = track.laneIndex * laneHeight
             val textY = laneTop + laneHeight / 2 + pHeaderText.textSize / 3
@@ -216,12 +211,10 @@ class MultitrackWaveformView @JvmOverloads constructor(
         drawGrid(canvas, w, h, p)
 
         // Волны
-        val leftClip = max(0, viewStartFrame.toInt())
-        val rightClip = (viewStartFrame + visibleWaveWidth * viewFramesPerPixel).toInt()
-
-        for ((index, track) in p.tracks.withIndex()) {
+        for (track in p.tracks) {
             val laneTop = track.laneIndex * laneHeight
             val laneCenterY = laneTop + laneHeight / 2
+            val halfH = laneHeight / 2 - 4
 
             if (track === activeTrack) {
                 canvas.drawRect(headerWidthPx.toFloat(), laneTop, (w - paddingPx).toFloat(),
@@ -229,20 +222,13 @@ class MultitrackWaveformView @JvmOverloads constructor(
             }
 
             val trackStartX = headerWidthPx + paddingPx + ((track.startOffsetFrames - viewStartFrame) / viewFramesPerPixel).toFloat()
-            val trackEndX = trackStartX + track.clip.frameCount() / viewFramesPerPixel
 
-            val drawStartX = max((headerWidthPx + paddingPx).toFloat(), trackStartX)
-            val drawEndX = min((w - paddingPx).toFloat(), trackEndX.toFloat())
+            // Получаем или строим пики для этого трека
+            val visibleWidth = w - headerWidthPx - paddingPx
+            val peaks = trackPeaks.getOrPut(track) { buildPeaks(track, visibleWidth) }
 
-            if (drawStartX < drawEndX) {
-                val peaks = trackPeaks.getOrPut(track) { buildPeaks(track.clip, visibleWaveWidth) }
-                val halfH = laneHeight / 2 - 4
-
-                canvas.save()
-                canvas.translate(trackStartX - (headerWidthPx + paddingPx), 0f)
-                drawWaveform(canvas, peaks, laneCenterY, halfH)
-                canvas.restore()
-            }
+            // Рисуем волну
+            drawWaveform(canvas, peaks, trackStartX, laneCenterY, halfH, w)
         }
     }
 
@@ -262,45 +248,87 @@ class MultitrackWaveformView @JvmOverloads constructor(
         }
     }
 
-    private fun buildPeaks(clip: AudioClip, width: Int): FloatArray {
-        val peaks = FloatArray(width)
-        val pcm = clip.pcm
+    private fun buildPeaks(track: ProjectTrack, width: Int): FloatArray {
+        val peaks = FloatArray(width * 2) // [min, max, ...]
+        val pcm = track.clip.pcm
         val totalFrames = pcm.size / 2
         if (totalFrames == 0 || width <= 0) return peaks
 
-        // Простой расчет пиков для видимой области
         val startFrame = max(0, viewStartFrame.toInt())
         val framesPerPx = viewFramesPerPixel
 
         for (x in 0 until width) {
             val f0 = (startFrame + x * framesPerPx).toInt()
             val f1 = (startFrame + (x + 1) * framesPerPx).toInt()
+            
+            var minVal = 0f
             var maxVal = 0f
+            var found = false
+            
+            // Берем каждый сэмпл в этом пикселе
             for (f in f0 until min(f1, totalFrames)) {
-                val l = abs(pcm[f * 2])
-                val r = abs(pcm[f * 2 + 1])
-                if (l > maxVal) maxVal = l
-                if (r > maxVal) maxVal = r
+                val l = pcm[f * 2]
+                val r = pcm[f * 2 + 1]
+                val mix = (l + r) * 0.5f
+                
+                if (!found) {
+                    minVal = mix
+                    maxVal = mix
+                    found = true
+                } else {
+                    if (mix < minVal) minVal = mix
+                    if (mix > maxVal) maxVal = mix
+                }
             }
-            peaks[x] = maxVal
+            
+            peaks[x * 2] = minVal
+            peaks[x * 2 + 1] = maxVal
         }
         return peaks
     }
 
-    private fun drawWaveform(canvas: Canvas, peaks: FloatArray, centerY: Float, halfH: Float) {
-        val path = android.graphics.Path()
-        path.reset()
-        for (x in peaks.indices) {
-            val y = centerY - peaks[x] * halfH
-            if (x == 0) path.moveTo(x.toFloat(), y)
-            else path.lineTo(x.toFloat(), y)
+    private fun drawWaveform(
+        canvas: Canvas,
+        peaks: FloatArray,
+        startX: Float,
+        centerY: Float,
+        halfH: Float,
+        viewWidth: Int
+    ) {
+        val width = peaks.size / 2
+        if (width == 0) return
+
+        // 1. Нормализация
+        var maxAmp = 0.001f
+        for (i in peaks.indices) {
+            val v = abs(peaks[i])
+            if (v > maxAmp) maxAmp = v
         }
-        for (x in peaks.indices.reversed()) {
-            val y = centerY + peaks[x] * halfH
-            path.lineTo(x.toFloat(), y)
+        val gain = (1.0f / maxAmp).coerceIn(1.0f, 3.0f)
+
+        // 2. Собираем линии
+        // На каждый пиксель — одна вертикальная линия от min до max
+        val lines = FloatArray(width * 4)
+        var idx = 0
+
+        for (x in 0 until width) {
+            val screenX = startX + x
+            if (screenX < headerWidthPx || screenX > viewWidth - paddingPx) continue
+
+            val minVal = (peaks[x * 2] * gain).coerceIn(-1f, 1f)
+            val maxVal = (peaks[x * 2 + 1] * gain).coerceIn(-1f, 1f)
+
+            val topY = centerY - (maxVal * halfH)
+            val botY = centerY - (minVal * halfH)
+
+            lines[idx++] = screenX
+            lines[idx++] = topY
+            lines[idx++] = screenX
+            lines[idx++] = botY
         }
-        path.close()
-        canvas.drawPath(path, pWave)
-        canvas.drawPath(path, pWaveStroke)
+
+        if (idx > 0) {
+            canvas.drawLines(lines, 0, idx, pWave)
+        }
     }
 }

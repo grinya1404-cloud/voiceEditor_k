@@ -15,27 +15,26 @@ object ProjectManager {
 
         val laneMap = mutableMapOf<String, Int>()
         var maxLane = -1
-        var currentOffset = 0
+        val laneOffsets = mutableMapOf<Int, Int>() // Смещение для каждого Lane
 
         for (f in files) {
             val r = WavReader.read(f)
             val clip = AudioClip(f.name, r.pcm, r.sampleRate)
             clip.dir = f
 
-            // Пытаемся понять, на какой Lane положить трек.
-            // Логика: "тест_9.wav" -> префикс "тест_", он же Lane.
+            // Определяем префикс (все до последнего подчеркивания)
             val baseName = f.nameWithoutExtension
             val prefix = baseName.substringBeforeLast('_', baseName)
 
+            // Определяем Lane для этого префикса
             val lane = laneMap.getOrPut(prefix) {
                 maxLane++
                 maxLane
             }
 
-            // Смещение: если мы кладем на тот же Lane, что и предыдущий,
-            // то ставим встык (или в 0, если это первый трек на Lane).
-            // Пока для простоты ставим 0 для всех.
-            val offset = 0
+            // Смещение: если на этом Lane уже есть треки, ставим новый встык
+            val offset = laneOffsets.getOrDefault(lane, 0)
+            laneOffsets[lane] = offset + clip.frameCount()
 
             val track = ProjectTrack(clip, offset, lane, colorForLane(lane))
             project.tracks.add(track)
