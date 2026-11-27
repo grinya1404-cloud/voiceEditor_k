@@ -3,12 +3,14 @@ package com.grinya.voicesampleprep.edit
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.util.AttributeSet
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
-import android.view.GestureDetector
 import android.view.View
 import com.grinya.voicesampleprep.model.AudioProject
+import com.grinya.voicesampleprep.model.AudioClip
 import com.grinya.voicesampleprep.model.ProjectTrack
 import kotlin.math.abs
 import kotlin.math.max
@@ -31,10 +33,11 @@ class MultitrackWaveformView @JvmOverloads constructor(
         listener = l
     }
 
-    // --- Параметры ---
+    // --- Данные ---
     private var project: AudioProject? = null
     private var activeTrack: ProjectTrack? = null
 
+    // --- Просмотр ---
     private var viewStartFrame = 0.0
     private var viewFramesPerPixel = 1.0
     private var paddingPx = (8 * resources.displayMetrics.density).toInt()
@@ -44,14 +47,9 @@ class MultitrackWaveformView @JvmOverloads constructor(
     private var gestureDetector: GestureDetector? = null
     private var scaleDetector: ScaleGestureDetector? = null
     private var lastTouchX = 0f
-    private var lastTouchY = 0f
-    private var scrollY = 0f
 
     // --- Краски ---
-    private val pHeaderBg = Paint().apply {
-        color = 0xFF1A1A1E.toInt()
-        style = Paint.Style.FILL
-    }
+    private val pHeaderBg = Paint().apply { color = 0xFF1A1A1E.toInt(); style = Paint.Style.FILL }
     private val pHeaderText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFFFFFFF.toInt()
         textSize = 12f * resources.displayMetrics.density
@@ -62,18 +60,17 @@ class MultitrackWaveformView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         strokeWidth = 2f * resources.displayMetrics.density
     }
-    private val pWave = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val pWaveFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFFFB300.toInt()
-        strokeWidth = 1f * resources.displayMetrics.density
+        style = Paint.Style.FILL
+        alpha = 180 // Полупрозрачная заливка
+    }
+    private val pWaveStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFB300.toInt()
         style = Paint.Style.STROKE
+        strokeWidth = 1f * resources.displayMetrics.density
     }
-    private val pGrid = Paint().apply {
-        color = 0xFF1F1F22.toInt()
-        strokeWidth = 1f
-    }
-
-    // Кэш пиков для каждого трека
-    private val trackPeaks = mutableMapOf<ProjectTrack, FloatArray>()
+    private val pGrid = Paint().apply { color = 0xFF1F1F22.toInt(); strokeWidth = 1f }
 
     init {
         setBackgroundColor(0xFF0E0E10.toInt())
@@ -93,7 +90,6 @@ class MultitrackWaveformView @JvmOverloads constructor(
                 viewStartFrame = focusFrame - fx * newFpp
                 viewFramesPerPixel = newFpp
                 clampView()
-                trackPeaks.clear() // Сброс кэша при зуме
                 invalidate()
                 return true
             }
@@ -101,10 +97,7 @@ class MultitrackWaveformView @JvmOverloads constructor(
 
         gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
             override fun onLongPress(e: MotionEvent) {
-                val track = activeTrack
-                if (track != null) {
-                    listener?.onTrackLongPressed(track)
-                }
+                activeTrack?.let { listener?.onTrackLongPressed(it) }
             }
         })
     }
@@ -112,10 +105,8 @@ class MultitrackWaveformView @JvmOverloads constructor(
     fun setProject(p: AudioProject?) {
         project = p
         activeTrack = p?.tracks?.firstOrNull()
-        trackPeaks.clear()
         viewStartFrame = 0.0
         viewFramesPerPixel = 1.0
-        scrollY = 0f
         invalidate()
     }
 
@@ -147,13 +138,11 @@ class MultitrackWaveformView @JvmOverloads constructor(
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 lastTouchX = e.x
-                lastTouchY = e.y
                 if (e.x < headerWidthPx) return true
 
                 val p = project ?: return true
                 val lanes = p.laneCount()
-                val h = height
-                val laneHeight = h.toFloat() / lanes // Пока без скролла, делим поровну
+                val laneHeight = height.toFloat() / lanes
                 val laneIndex = (e.y / laneHeight).toInt()
 
                 if (laneIndex in 0 until lanes) {
@@ -161,7 +150,6 @@ class MultitrackWaveformView @JvmOverloads constructor(
                         if (track.laneIndex == laneIndex) {
                             val trackStartX = headerWidthPx + paddingPx + ((track.startOffsetFrames - viewStartFrame) / viewFramesPerPixel).toFloat()
                             val trackEndX = trackStartX + track.clip.frameCount() / viewFramesPerPixel
-
                             if (e.x >= trackStartX && e.x <= trackEndX) {
                                 activeTrack = track
                                 invalidate()
@@ -179,9 +167,6 @@ class MultitrackWaveformView @JvmOverloads constructor(
                 lastTouchX = e.x
                 clampView()
                 invalidate()
-                return true
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 return true
             }
         }
@@ -207,7 +192,7 @@ class MultitrackWaveformView @JvmOverloads constructor(
             canvas.drawText(track.displayName, 8f, textY, pHeaderText)
         }
 
-        // Сетка (вертикальные линии)
+        // Сетка
         drawGrid(canvas, w, h, p)
 
         // Волны
@@ -223,12 +208,8 @@ class MultitrackWaveformView @JvmOverloads constructor(
 
             val trackStartX = headerWidthPx + paddingPx + ((track.startOffsetFrames - viewStartFrame) / viewFramesPerPixel).toFloat()
 
-            // Получаем или строим пики для этого трека
-            val visibleWidth = w - headerWidthPx - paddingPx
-            val peaks = trackPeaks.getOrPut(track) { buildPeaks(track, visibleWidth) }
-
             // Рисуем волну
-            drawWaveform(canvas, peaks, trackStartX, laneCenterY, halfH, w)
+            drawWaveform(canvas, track.clip, trackStartX, laneCenterY, halfH, w)
         }
     }
 
@@ -248,87 +229,73 @@ class MultitrackWaveformView @JvmOverloads constructor(
         }
     }
 
-    private fun buildPeaks(track: ProjectTrack, width: Int): FloatArray {
-        val peaks = FloatArray(width * 2) // [min, max, ...]
-        val pcm = track.clip.pcm
+    private fun drawWaveform(canvas: Canvas, clip: AudioClip, startX: Float, centerY: Float, halfH: Float, viewWidth: Int) {
+        val pcm = clip.pcm
         val totalFrames = pcm.size / 2
-        if (totalFrames == 0 || width <= 0) return peaks
+        if (totalFrames == 0) return
 
-        val startFrame = max(0, viewStartFrame.toInt())
-        val framesPerPx = viewFramesPerPixel
+        val visibleWidth = viewWidth - headerWidthPx - paddingPx
+        if (visibleWidth <= 0) return
 
-        for (x in 0 until width) {
-            val f0 = (startFrame + x * framesPerPx).toInt()
-            val f1 = (startFrame + (x + 1) * framesPerPx).toInt()
-            
-            var minVal = 0f
-            var maxVal = 0f
-            var found = false
-            
-            // Берем каждый сэмпл в этом пикселе
-            for (f in f0 until min(f1, totalFrames)) {
-                val l = pcm[f * 2]
-                val r = pcm[f * 2 + 1]
-                val mix = (l + r) * 0.5f
-                
-                if (!found) {
-                    minVal = mix
-                    maxVal = mix
-                    found = true
-                } else {
-                    if (mix < minVal) minVal = mix
-                    if (mix > maxVal) maxVal = mix
-                }
-            }
-            
-            peaks[x * 2] = minVal
-            peaks[x * 2 + 1] = maxVal
-        }
-        return peaks
-    }
-
-    private fun drawWaveform(
-        canvas: Canvas,
-        peaks: FloatArray,
-        startX: Float,
-        centerY: Float,
-        halfH: Float,
-        viewWidth: Int
-    ) {
-        val width = peaks.size / 2
-        if (width == 0) return
-
-        // 1. Нормализация
+        // Находим пик для нормализации (чтобы тихие треки были видны)
         var maxAmp = 0.001f
-        for (i in peaks.indices) {
-            val v = abs(peaks[i])
+        for (i in pcm.indices) {
+            val v = abs(pcm[i])
             if (v > maxAmp) maxAmp = v
         }
-        val gain = (1.0f / maxAmp).coerceIn(1.0f, 3.0f)
+        val gain = (1.0f / maxAmp).coerceIn(1.0f, 3.0f) // Усиление до 3x
 
-        // 2. Собираем линии
-        // На каждый пиксель — одна вертикальная линия от min до max
-        val lines = FloatArray(width * 4)
-        var idx = 0
+        val path = Path()
+        path.reset()
+        var started = false
 
-        for (x in 0 until width) {
+        // Рисуем верхнюю огибающую (max)
+        for (x in 0 until visibleWidth) {
             val screenX = startX + x
             if (screenX < headerWidthPx || screenX > viewWidth - paddingPx) continue
 
-            val minVal = (peaks[x * 2] * gain).coerceIn(-1f, 1f)
-            val maxVal = (peaks[x * 2 + 1] * gain).coerceIn(-1f, 1f)
+            val framePos = viewStartFrame + (screenX - headerWidthPx - paddingPx) * viewFramesPerPixel
+            val f0 = framePos.toInt()
+            if (f0 < 0 || f0 >= totalFrames) continue
 
-            val topY = centerY - (maxVal * halfH)
-            val botY = centerY - (minVal * halfH)
-
-            lines[idx++] = screenX
-            lines[idx++] = topY
-            lines[idx++] = screenX
-            lines[idx++] = botY
+            var maxVal = 0f
+            val f1 = min(f0 + viewFramesPerPixel.toInt().coerceAtLeast(1), totalFrames)
+            for (f in f0 until f1) {
+                val l = pcm[f * 2]
+                val r = pcm[f * 2 + 1]
+                val mix = (l + r) * 0.5f
+                if (mix > maxVal) maxVal = mix
+            }
+            
+            val y = centerY - (maxVal * gain * halfH).coerceIn(-halfH, halfH)
+            if (!started) { path.moveTo(screenX, y); started = true }
+            else path.lineTo(screenX, y)
         }
 
-        if (idx > 0) {
-            canvas.drawLines(lines, 0, idx, pWave)
+        // Рисуем нижнюю огибающую (min) в обратном порядке
+        for (x in visibleWidth - 1 downTo 0) {
+            val screenX = startX + x
+            if (screenX < headerWidthPx || screenX > viewWidth - paddingPx) continue
+
+            val framePos = viewStartFrame + (screenX - headerWidthPx - paddingPx) * viewFramesPerPixel
+            val f0 = framePos.toInt()
+            if (f0 < 0 || f0 >= totalFrames) continue
+
+            var minVal = 0f
+            val f1 = min(f0 + viewFramesPerPixel.toInt().coerceAtLeast(1), totalFrames)
+            for (f in f0 until f1) {
+                val l = pcm[f * 2]
+                val r = pcm[f * 2 + 1]
+                val mix = (l + r) * 0.5f
+                if (mix < minVal) minVal = mix
+            }
+            
+            val y = centerY - (minVal * gain * halfH).coerceIn(-halfH, halfH)
+            path.lineTo(screenX, y)
         }
+        path.close()
+
+        canvas.drawPath(path, pWaveFill)
+        canvas.drawPath(path, pWaveStroke)
     }
 }
