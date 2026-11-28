@@ -9,13 +9,37 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Плавающая кнопка меню -->
+    <ImageButton
+        android:id="@+id/btnmultiMenu"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:background="#AA1A1A1E"
+        android:src="@android:drawable/ic_menu_more"
+        android:tint="@color/accent" />
+
+    <!-- Кнопка-замок -->
+    <ImageButton
+        android:id="@+id/btnLock"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="80dp"
+        android:layout_marginEnd="16dp"
+        android:background="#AA1A1A1E"
+        android:src="@android:drawable/ic_lock_idle_lock"
+        android:tint="@color/accent" />
+
+    <!-- Кнопка добавления трека -->
     <Button
         android:id="@+id/btnAddTrack"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
-        android:text="+ Добавить трек"
+        android:text="+"
         android:backgroundTint="@color/accent"
         android:textColor="@color/bg" />
 

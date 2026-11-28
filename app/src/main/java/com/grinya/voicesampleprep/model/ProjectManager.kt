@@ -13,28 +13,28 @@ object ProjectManager {
         val files = dir.listFiles { f -> f.isFile && f.name.lowercase().endsWith(".wav") } ?: return project
         files.sortBy { it.name }
 
+        // Пытаемся прочитать сохранённые смещения
+        val savedOffsets = readOffsetsFromJson(File(dir, "project.json"))
+
         val laneMap = mutableMapOf<String, Int>()
         var maxLane = -1
-        val laneOffsets = mutableMapOf<Int, Int>() // Смещение для каждого Lane
+        val laneOffsets = mutableMapOf<Int, Int>()
 
         for (f in files) {
             val r = WavReader.read(f)
             val clip = AudioClip(f.name, r.pcm, r.sampleRate)
             clip.dir = f
 
-            // Определяем префикс (все до последнего подчеркивания)
             val baseName = f.nameWithoutExtension
             val prefix = baseName.substringBeforeLast('_', baseName)
 
-            // Определяем Lane для этого префикса
             val lane = laneMap.getOrPut(prefix) {
                 maxLane++
                 maxLane
             }
 
-            // Смещение: если на этом Lane уже есть треки, ставим новый встык
-            val offset = laneOffsets.getOrDefault(lane, 0)
-            laneOffsets[lane] = offset + clip.frameCount()
+            // Если есть сохранённое смещение — берем его, иначе 0
+            val offset = savedOffsets[f.name] ?: 0
 
             val track = ProjectTrack(clip, offset, lane, colorForLane(lane))
             project.tracks.add(track)
@@ -42,6 +42,24 @@ object ProjectManager {
 
         project.sampleRate = project.tracks.firstOrNull()?.clip?.sampleRate ?: 48000
         return project
+    }
+
+    private fun readOffsetsFromJson(jsonFile: File): Map<String, Int> {
+        val map = mutableMapOf<String, Int>()
+        if (!jsonFile.exists()) return map
+        try {
+            val text = jsonFile.readText()
+            // Очень простой парсер: ищем "fileName": "...", "startOffsetFrames": N
+            val regex = "\"fileName\":\\s*\"([^\"]+)\".*?\"startOffsetFrames\":\\s*(\\d+)".toRegex()
+            regex.findAll(text).forEach { match ->
+                val fileName = match.groupValues[1]
+                val offset = match.groupValues[2].toIntOrNull() ?: 0
+                map[fileName] = offset
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PROJECT", "Ошибка чтения JSON", e)
+        }
+        return map
     }
 
     private fun colorForLane(lane: Int): Int {
@@ -110,6 +128,32 @@ object ProjectManager {
         project.sampleRate = newClip.sampleRate
 
         return project
+    }
+
+    fun saveProject(project: AudioProject) {
+        val dir = project.dir ?: return
+        val jsonFile = File(dir, "project.json")
+        try {
+            jsonFile.writeText(buildString {
+                    append("{\n")
+                    append("  \"name\": \"${project.name}\",\n")
+                    append("  \"sampleRate\": ${project.sampleRate},\n")
+                    append("  \"tracks\": [\n")
+                    project.tracks.forEachIndexed { index, track ->
+                        append("    {")
+                        append("\"fileName\": \"${track.clip.name}\", ")
+                        append("\"startOffsetFrames\": ${track.startOffsetFrames}, ")
+                        append("\"laneIndex\": ${track.laneIndex}")
+                        append("}")
+                        if (index < project.tracks.size - 1) append(",")
+                        append("\n")
+                    }
+                    append("  ]\n")
+                    append("}\n")
+            })
+        } catch (e: Exception) {
+            android.util.Log.e("PROJECT", "Ошибка сохранения", e)
+        }
     }
 
 }

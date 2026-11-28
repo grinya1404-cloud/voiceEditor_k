@@ -17,12 +17,14 @@ import com.grinya.voicesampleprep.model.ProjectTrack
 import com.grinya.voicesampleprep.util.AudioInfoDialog
 import java.io.File
 import java.io.FileOutputStream
+import android.widget.ImageButton
 
 class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener {
 
     private var wave: MultitrackWaveformView? = null
     private var project: AudioProject? = null
     private var activeTrack: ProjectTrack? = null
+    private var isEditMode = false
 
     private val importLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -42,7 +44,7 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
             return
         }
 
-        val dir = File(projectDirPath)
+        val dir = java.io.File(projectDirPath)
         if (!dir.exists()) {
             Toast.makeText(this, "Папка не найдена", Toast.LENGTH_SHORT).show()
             finish()
@@ -50,7 +52,7 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
         }
 
         try {
-            project = ProjectManager.loadProject(dir)
+            project = com.grinya.voicesampleprep.model.ProjectManager.loadProject(dir)
         } catch (e: Exception) {
             Toast.makeText(this, "Ошибка загрузки: ${e.message}", Toast.LENGTH_LONG).show()
             finish()
@@ -61,19 +63,70 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
         wave?.setListener(this)
         wave?.setProject(project)
 
+        // --- Кнопка-замок (режим редактирования) ---
+        val btnLock = findViewById<ImageButton>(R.id.btnLock)
+        btnLock.setColorFilter(0xFFFFB300.toInt()) // Изначально (закрыт)
+
+        btnLock.setOnClickListener {
+            isEditMode = !isEditMode
+            wave?.setEditMode(isEditMode)
+
+            // Закрыт (isEditMode = false) -> серый
+            // Открыт (isEditMode = true) -> фиолетовый
+            btnLock.setColorFilter(
+                if (isEditMode) 0xFF808080.toInt() // серый (открыт)
+                else 0xFFFFB300.toInt()            // оранжевый (закрыт)
+            )
+
+            Toast.makeText(
+                this,
+                if (isEditMode) "Режим редактирования ВКЛ" else "Режим просмотра",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        // --- Кнопка меню (⋮) ---
+        findViewById<ImageButton>(R.id.btnmultiMenu).setOnClickListener {
+            
+                Toast.makeText(this, "заглушка", Toast.LENGTH_SHORT).show()
+            
+        }
+
+        // --- Кнопка добавления трека ---
         findViewById<Button>(R.id.btnAddTrack).setOnClickListener { pickTrackToAdd() }
     }
 
     private fun showTrackActions(track: ProjectTrack) {
-        AlertDialog.Builder(this)
+        val items = arrayOf(
+            "Редактировать",
+            "Инфо",
+            "Сдвинуть влево (0.1с)",
+            "Сдвинуть вправо (0.1с)",
+            "Сдвинуть влево (1с)",
+            "Сдвинуть вправо (1с)",
+            "Удалить из проекта"
+        )
+        androidx.appcompat.app.AlertDialog.Builder(this)
         .setTitle(track.displayName)
-        .setItems(arrayOf("Редактировать", "Инфо", "Удалить из проекта")) { _, which ->
+        .setItems(items) { _, which ->
             when (which) {
                 0 -> openEditor(track)
                 1 -> showTrackInfo(track)
-                2 -> deleteTrack(track)
+                2 -> shiftTrack(track, -0.1)
+                3 -> shiftTrack(track, 0.1)
+                4 -> shiftTrack(track, -1.0)
+                5 -> shiftTrack(track, 1.0)
+                6 -> deleteTrack(track)
             }
         }.show()
+    }
+
+    private fun shiftTrack(track: ProjectTrack, seconds: Double) {
+        val p = project ?: return
+        val deltaFrames = (seconds * p.sampleRate).toInt()
+        track.startOffsetFrames = (track.startOffsetFrames + deltaFrames).coerceAtLeast(0)
+        wave?.invalidate() // Перерисовать
+        Toast.makeText(this, "Сдвинут на ${seconds}с", Toast.LENGTH_SHORT).show()
     }
 
     private fun openEditor(track: ProjectTrack) {
@@ -183,7 +236,7 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
 
     override fun onTrackSelected(track: ProjectTrack) {
         activeTrack = track
-        Toast.makeText(this, "Выбран: ${track.displayName}", Toast.LENGTH_SHORT).show()
+        // Toast.makeText(this, "Выбран: ${track.displayName}", Toast.LENGTH_SHORT).show()
     }
 
     override fun onTrackLongPressed(track: ProjectTrack) {
