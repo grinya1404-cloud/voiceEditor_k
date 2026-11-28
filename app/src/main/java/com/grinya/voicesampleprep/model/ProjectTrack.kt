@@ -6,8 +6,11 @@ class ProjectTrack(
     @JvmField var clip: AudioClip,
     @JvmField var startOffsetFrames: Int = 0,
     @JvmField var laneIndex: Int = 0,
-    @JvmField var color: Int = 0xFFFFB300.toInt() // По умолчанию янтарный
+    @JvmField var color: Int = 0xFFFFB300.toInt()
 ) {
+    @JvmField var isMuted: Boolean = false // <-- Заглушен
+    @JvmField var isSolo: Boolean = false  // <-- Соло
+
     /** Имя файла без расширения (например, "тест_9") */
     val displayName: String
         get() {

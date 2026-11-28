@@ -23,6 +23,7 @@ class MultitrackWaveformView @JvmOverloads constructor(
     interface Listener {
         fun onTrackSelected(track: ProjectTrack)
         fun onTrackLongPressed(track: ProjectTrack)
+        fun onSeek(frame: Int)
     }
 
     private var listener: Listener? = null
@@ -36,6 +37,7 @@ class MultitrackWaveformView @JvmOverloads constructor(
     private var viewFramesPerPixel = 1.0
     private var paddingPx = (8 * resources.displayMetrics.density).toInt()
     private var isEditMode = false
+    private var playheadFrame = 0
 
     // Жесты и перетаскивание
     private var gestureDetector: GestureDetector? = null
@@ -67,48 +69,48 @@ class MultitrackWaveformView @JvmOverloads constructor(
 
         // 1. Зум
         scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                if (project == null) return true
-                val oldFpp = viewFramesPerPixel
-                var newFpp = oldFpp / detector.scaleFactor
-                val minFpp = 1.0 / 8.0
-                val maxFpp = max(1, project?.totalFrames() ?: 1).toDouble()
-                if (newFpp < minFpp) newFpp = minFpp
-                if (newFpp > maxFpp) newFpp = maxFpp
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    if (project == null) return true
+                    val oldFpp = viewFramesPerPixel
+                    var newFpp = oldFpp / detector.scaleFactor
+                    val minFpp = 1.0 / 8.0
+                    val maxFpp = max(1, project?.totalFrames() ?: 1).toDouble()
+                    if (newFpp < minFpp) newFpp = minFpp
+                    if (newFpp > maxFpp) newFpp = maxFpp
 
-                val fx = detector.focusX - paddingPx
-                val focusFrame = viewStartFrame + fx * oldFpp
-                viewStartFrame = focusFrame - fx * newFpp
-                viewFramesPerPixel = newFpp
-                clampView()
-                invalidate()
-                return true
-            }
+                    val fx = detector.focusX - paddingPx
+                    val focusFrame = viewStartFrame + fx * oldFpp
+                    viewStartFrame = focusFrame - fx * newFpp
+                    viewFramesPerPixel = newFpp
+                    clampView()
+                    invalidate()
+                    return true
+                }
         })
 
         // 2. Тапы (двойной тап для зума, долгий для меню/драга)
         gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-            override fun onDoubleTap(e: MotionEvent): Boolean {
-                zoomToFit()
-                return true
-            }
-
-            override fun onLongPress(e: MotionEvent) {
-                val track = findTrackAt(e.x, e.y) ?: return
-                activeTrack = track
-                invalidate()
-
-                if (isEditMode) {
-                    // Режим редактирования -> захватываем для драга
-                    draggingTrack = track
-                    dragStartOffset = track.startOffsetFrames
-                    dragStartTouchX = e.x
-                    performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                } else {
-                    // Режим просмотра -> меню
-                    listener?.onTrackLongPressed(track)
+                override fun onDoubleTap(e: MotionEvent): Boolean {
+                    zoomToFit()
+                    return true
                 }
-            }
+
+                override fun onLongPress(e: MotionEvent) {
+                    val track = findTrackAt(e.x, e.y) ?: return
+                    activeTrack = track
+                    invalidate()
+
+                    if (isEditMode) {
+                        // Режим редактирования -> захватываем для драга
+                        draggingTrack = track
+                        dragStartOffset = track.startOffsetFrames
+                        dragStartTouchX = e.x
+                        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                    } else {
+                        // Режим просмотра -> меню
+                        listener?.onTrackLongPressed(track)
+                    }
+                }
         })
     }
 
@@ -143,12 +145,12 @@ class MultitrackWaveformView @JvmOverloads constructor(
         val p = project ?: return
         val totalFrames = p.totalFrames()
         if (totalFrames <= 0) { viewStartFrame = 0.0; return }
-        
+
         val visibleWidth = width - 2 * paddingPx
         if (visibleWidth <= 0) return
         val visibleFrames = visibleWidth * viewFramesPerPixel
         val maxStart = max(0.0, totalFrames - visibleFrames)
-        
+
         if (viewStartFrame < 0) viewStartFrame = 0.0
         if (viewStartFrame > maxStart) viewStartFrame = maxStart
     }
@@ -197,6 +199,9 @@ class MultitrackWaveformView @JvmOverloads constructor(
                     invalidate()
                     listener?.onTrackSelected(track)
                 }
+                val frame = ((e.x - paddingPx) * viewFramesPerPixel + viewStartFrame).toInt()
+                listener?.onSeek(frame)
+
                 return true
             }
             MotionEvent.ACTION_MOVE -> {
@@ -243,6 +248,7 @@ class MultitrackWaveformView @JvmOverloads constructor(
         drawGrid(canvas, w, h, p)
 
         // Треки
+        // Треки
         for (track in p.tracks) {
             val laneTop = track.laneIndex * laneHeight
             val laneCenterY = laneTop + laneHeight / 2
@@ -253,12 +259,32 @@ class MultitrackWaveformView @JvmOverloads constructor(
                 canvas.drawRect(0f, laneTop, w.toFloat(), laneTop + laneHeight, pActiveBorder)
             }
 
-            // Волна
+            // Смещение трека
             val trackStartX = paddingPx + ((track.startOffsetFrames - viewStartFrame) / viewFramesPerPixel).toFloat()
-            drawWaveformBlocks(canvas, track, trackStartX, laneCenterY, halfH, w)
 
-            // Название трека (сверху слева от волны)
+            // Цвет волны в зависимости от состояния
+            val waveColor = when {
+                track.isMuted -> 0xFF555555.toInt() // Серый (отключен)
+                track.isSolo -> 0xFFFF3B30.toInt()  // Красный (соло)
+                else -> 0xFFFFB300.toInt()          // Оранжевый (обычный)
+            }
+
+            drawWaveformBlocks(canvas, track, trackStartX, laneCenterY, halfH, w, waveColor)
+            // Отрисовка волны (передаем цвет)
+            drawWaveformBlocks(canvas, track, trackStartX, laneCenterY, halfH, w, waveColor)
+
+            // Название трека
             canvas.drawText(track.displayName, paddingPx + 8f, laneTop + 20f * resources.displayMetrics.density, pTrackName)
+        }
+        // Playhead
+        val playheadX = paddingPx + ((playheadFrame - viewStartFrame) / viewFramesPerPixel).toFloat()
+        if (playheadX >= paddingPx && playheadX <= w - paddingPx) {
+            val pPlayhead = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0xFFFF3B30.toInt()
+                strokeWidth = 2f * resources.displayMetrics.density
+                style = Paint.Style.STROKE
+            }
+            canvas.drawLine(playheadX, 0f, playheadX, h.toFloat(), pPlayhead)
         }
     }
 
@@ -278,7 +304,15 @@ class MultitrackWaveformView @JvmOverloads constructor(
         }
     }
 
-    private fun drawWaveformBlocks(canvas: Canvas, track: ProjectTrack, startX: Float, centerY: Float, halfH: Float, viewWidth: Int) {
+    private fun drawWaveformBlocks(
+        canvas: Canvas,
+        track: ProjectTrack,
+        startX: Float,
+        centerY: Float,
+        halfH: Float,
+        viewWidth: Int,
+        color: Int // <-- Новый параметр
+    ) {
         val pcm = track.clip.pcm
         val totalFrames = pcm.size / 2
         if (totalFrames == 0) return
@@ -293,8 +327,9 @@ class MultitrackWaveformView @JvmOverloads constructor(
         }
         val gain = (1.0f / maxAmp).coerceIn(1.0f, 4.0f)
 
+        // Используем переданный цвет
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFFFFB300.toInt()
+            this.color = color
             style = Paint.Style.FILL
         }
 
@@ -344,4 +379,10 @@ class MultitrackWaveformView @JvmOverloads constructor(
             }
         }
     }
+
+    fun setPlayheadFrame(frame: Int) {
+        playheadFrame = frame
+        invalidate()
+    }
+
 }

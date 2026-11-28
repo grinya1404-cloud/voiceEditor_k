@@ -18,6 +18,9 @@ import com.grinya.voicesampleprep.util.AudioInfoDialog
 import java.io.File
 import java.io.FileOutputStream
 import android.widget.ImageButton
+import android.view.View
+import com.grinya.voicesampleprep.audio.MultitrackPlayer
+import com.grinya.voicesampleprep.audio.AudioPlayer
 
 class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener {
 
@@ -25,6 +28,9 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
     private var project: AudioProject? = null
     private var activeTrack: ProjectTrack? = null
     private var isEditMode = false
+    private var mtPlayer: MultitrackPlayer? = null
+    private var isLeftEnabled = true
+    private var isRightEnabled = true
 
     private val importLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -59,25 +65,48 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
             return
         }
 
+        mtPlayer = MultitrackPlayer()
+        mtPlayer?.setListener(object : AudioPlayer.Listener {
+                override fun onPosition(positionMs: Int) {
+                    val frame = (positionMs * project!!.sampleRate / 1000)
+                    wave?.setPlayheadFrame(frame)
+                }
+                override fun onEnded() {
+                    // Сброс иконки Play
+                    findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.btnPlay).setImageResource(android.R.drawable.ic_media_play)
+                }
+                override fun onStateChanged(playing: Boolean) {
+                    val icon = if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+                    findViewById<com.google.android.material.floatingactionbutton.FloatingActionButton>(R.id.btnPlay).setImageResource(icon)
+                }
+        })
+
+        mtPlayer?.prepare(project!!)
+
+        findViewById<View>(R.id.btnPlay).setOnClickListener {
+            if (mtPlayer?.isPlaying() == true) {
+                mtPlayer?.pause()
+            } else {
+                mtPlayer?.play()
+            }
+        }
+
+        findViewById<View>(R.id.btnBack).setOnClickListener { finish() }
+
         wave = findViewById(R.id.waveMultitrack)
         wave?.setListener(this)
         wave?.setProject(project)
 
         // --- Кнопка-замок (режим редактирования) ---
+        // Замок
         val btnLock = findViewById<ImageButton>(R.id.btnLock)
-        btnLock.setColorFilter(0xFFFFB300.toInt()) // Изначально (закрыт)
-
         btnLock.setOnClickListener {
             isEditMode = !isEditMode
             wave?.setEditMode(isEditMode)
-
-            // Закрыт (isEditMode = false) -> серый
-            // Открыт (isEditMode = true) -> фиолетовый
             btnLock.setColorFilter(
-                if (isEditMode) 0xFF808080.toInt() // серый (открыт)
-                else 0xFFFFB300.toInt()            // оранжевый (закрыт)
+                if (isEditMode) 0xFF9C27B0.toInt() // Фиолетовый (открыт)
+                else 0xFF808080.toInt()            // Серый (закрыт)
             )
-
             Toast.makeText(
                 this,
                 if (isEditMode) "Режим редактирования ВКЛ" else "Режим просмотра",
@@ -85,15 +114,56 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
             ).show()
         }
 
-        // --- Кнопка меню (⋮) ---
-        findViewById<ImageButton>(R.id.btnmultiMenu).setOnClickListener {
-            
-                Toast.makeText(this, "заглушка", Toast.LENGTH_SHORT).show()
-            
-        }
-
         // --- Кнопка добавления трека ---
         findViewById<Button>(R.id.btnAddTrack).setOnClickListener { pickTrackToAdd() }
+
+        findViewById<View>(R.id.btnStop).setOnClickListener {
+            mtPlayer?.stop()
+            wave?.setPlayheadFrame(0)
+        }
+
+        // Каналы L/R
+        // Кнопки L/R (теперь Mute/Solo)
+        val btnL = findViewById<Button>(R.id.btnL)
+        val btnR = findViewById<Button>(R.id.btnR)
+
+        btnL.setOnClickListener {
+            val track = activeTrack ?: run {
+                Toast.makeText(this, "Сначала выберите трек", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            track.isMuted = !track.isMuted
+            btnL.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (track.isMuted) 0xFF555555.toInt() else 0xAAFFB300.toInt()
+            )
+            refreshPlayer()
+            wave?.invalidate() // Перерисовать волну с новым цветом
+        }
+
+        btnR.setOnClickListener {
+            val track = activeTrack ?: run {
+                Toast.makeText(this, "Сначала выберите трек", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            track.isSolo = !track.isSolo
+            btnR.backgroundTintList = android.content.res.ColorStateList.valueOf(
+                if (track.isSolo) 0xFFFF3B30.toInt() else 0xAAFFB300.toInt()
+            )
+            refreshPlayer()
+            wave?.invalidate()
+        }
+
+        // Заглушки для верхнего меню
+        findViewById<View>(R.id.btnUndo).setOnClickListener { Toast.makeText(this, "Undo (в разработке)", Toast.LENGTH_SHORT).show() }
+        findViewById<View>(R.id.btnRedo).setOnClickListener { Toast.makeText(this, "Redo (в разработке)", Toast.LENGTH_SHORT).show() }
+        findViewById<View>(R.id.btnInfo).setOnClickListener { Toast.makeText(this, "Инфо (в разработке)", Toast.LENGTH_SHORT).show() }
+        findViewById<View>(R.id.btnSave).setOnClickListener {
+            project?.let {
+                ProjectManager.saveProject(it)
+                Toast.makeText(this, "Сохранено", Toast.LENGTH_SHORT).show()
+            }
+        }
+
     }
 
     private fun showTrackActions(track: ProjectTrack) {
@@ -234,14 +304,40 @@ class MultitrackActivity : AppCompatActivity(), MultitrackWaveformView.Listener 
         }
     }
 
+    // override fun onTrackSelected(track: ProjectTrack) {
+    //     activeTrack = track
+    //     // Toast.makeText(this, "Выбран: ${track.displayName}", Toast.LENGTH_SHORT).show()
+    // }
+
     override fun onTrackSelected(track: ProjectTrack) {
         activeTrack = track
-        // Toast.makeText(this, "Выбран: ${track.displayName}", Toast.LENGTH_SHORT).show()
+        // Обновляем кнопки
+        val btnL = findViewById<Button>(R.id.btnL)
+        val btnR = findViewById<Button>(R.id.btnR)
+        btnL.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (!track.isMuted) 0xAAFFB300.toInt() else 0xAA1A1A1E.toInt()
+        )
+        btnR.backgroundTintList = android.content.res.ColorStateList.valueOf(
+            if (!track.isSolo) 0xAAFFB300.toInt() else 0xAA1A1A1E.toInt()
+        )
     }
 
     override fun onTrackLongPressed(track: ProjectTrack) {
         activeTrack = track
         showTrackActions(track) // Показываем меню (Редактировать, Инфо, Удалить)
+    }
+
+    override fun onSeek(frame: Int) {
+        mtPlayer?.seekToFrame(frame)
+        wave?.setPlayheadFrame(frame)
+    }
+    private fun refreshPlayer() {
+        val p = project ?: return
+        val wasPlaying = mtPlayer?.isPlaying() == true
+        mtPlayer?.pause()
+        mtPlayer?.prepare(p)
+        if (wasPlaying) mtPlayer?.play()
+        wave?.invalidate()
     }
 
 }

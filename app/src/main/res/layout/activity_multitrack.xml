@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg">
@@ -9,37 +10,136 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Плавающая кнопка меню -->
-    <ImageButton
-        android:id="@+id/btnmultiMenu"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_gravity="top|end"
-        android:layout_margin="16dp"
+    <!-- Верхняя панель (как в редакторе) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:orientation="horizontal"
         android:background="#AA1A1A1E"
-        android:src="@android:drawable/ic_menu_more"
-        android:tint="@color/accent" />
+        android:padding="8dp"
+        android:gravity="center_vertical">
 
-    <!-- Кнопка-замок -->
-    <ImageButton
-        android:id="@+id/btnLock"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="@color/onSurface" />
+
+        <ImageButton
+            android:id="@+id/btnUndo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_revert"
+            android:tint="@color/onSurface" />
+
+        <ImageButton
+            android:id="@+id/btnRedo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:tint="@color/onSurface" />
+
+        <!-- ЗАМОК -->
+        <ImageButton
+            android:id="@+id/btnLock"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_lock_idle_lock"
+            android:tint="#808080" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <ImageButton
+            android:id="@+id/btnInfo"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_info_details"
+            android:tint="@color/onSurface" />
+
+        <ImageButton
+            android:id="@+id/btnSave"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_save"
+            android:tint="@color/onSurface" />
+    </LinearLayout>
+
+    <!-- Кнопки каналов (L/R) -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_gravity="top|end"
-        android:layout_marginTop="80dp"
+        android:layout_marginTop="64dp"
         android:layout_marginEnd="16dp"
-        android:background="#AA1A1A1E"
-        android:src="@android:drawable/ic_lock_idle_lock"
-        android:tint="@color/accent" />
+        android:orientation="horizontal">
 
-    <!-- Кнопка добавления трека -->
+        <Button
+            android:id="@+id/btnL"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:text="M"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:backgroundTint="#AAFFB300"
+            android:textColor="@color/bg" />
+
+        <Button
+            android:id="@+id/btnR"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:text="S"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:backgroundTint="#AAFFB300"
+            android:textColor="@color/bg" />
+    </LinearLayout>
+
+    <!-- Кнопки Play и Stop -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="16dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnPlay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:src="@android:drawable/ic_media_play"
+            app:backgroundTint="@color/accent"
+            app:tint="@color/bg" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnStop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            app:backgroundTint="#AA1A1A1E"
+            app:tint="@color/onSurface" />
+    </LinearLayout>
+
+    <!-- Добавить трек -->
     <Button
         android:id="@+id/btnAddTrack"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
-        android:text="+"
+        android:text="+ Добавить трек"
         android:backgroundTint="@color/accent"
         android:textColor="@color/bg" />
 
